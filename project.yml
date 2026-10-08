@@ -1,0 +1,74 @@
+name: IPTVPlayer
+options:
+  bundleIdPrefix: com.iptvplayer
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    ARCHS: arm64
+    VALID_ARCHS: arm64
+    EXCLUDED_ARCHS[sdk=macosx*]: x86_64
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Automatic
+    PRODUCT_BUNDLE_IDENTIFIER: com.iptvplayer.app
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    INFOPLIST_FILE: IPTVPlayer/Info.plist
+    GENERATE_INFOPLIST_FILE: true
+    INFOPLIST_KEY_CFBundleDisplayName: "IPTV Player"
+    INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.entertainment"
+    INFOPLIST_KEY_NSHumanReadableCopyright: ""
+    ENABLE_HARDENED_RUNTIME: true
+    COMBINE_HIDPI_IMAGES: true
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  IPTVPlayer:
+    type: application
+    platform: macOS
+    sources:
+      - path: IPTVPlayer
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        PRODUCT_NAME: "IPTV Player"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: true
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG"
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          SWIFT_COMPILATION_MODE: wholemodule
+    entitlements:
+      path: IPTVPlayer/IPTVPlayer.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-only: true
+
+  IPTVPlayerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: IPTVPlayerTests
+    dependencies:
+      - target: IPTVPlayer
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/IPTV Player.app/Contents/MacOS/IPTV Player"

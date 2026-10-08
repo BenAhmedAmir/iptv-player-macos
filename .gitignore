@@ -1,0 +1,83 @@
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+# SwiftPM build directory — ~900 MB of object files and intermediates.
+.build/
+.swiftpm/
+
+# Packaged app bundle produced by scripts/build_app.sh.
+build/
+*.app
+*.dmg
+
+# Stray executable left in the repo root by an early `swiftc -o main` run.
+/main
+
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.moved-aside
+
+# ---------------------------------------------------------------------------
+# Vendored dependencies
+# ---------------------------------------------------------------------------
+# VLCKit is ~36 MB and is reproducible from a pinned upstream archive.
+# Run scripts/fetch_vlckit.sh after cloning.
+vendor/
+
+# ---------------------------------------------------------------------------
+# Secrets and signing material
+# ---------------------------------------------------------------------------
+# Never commit private keys, certificates or keychains. The code-signing
+# identity is created locally by scripts/create_signing_cert.sh; nothing it
+# produces belongs in version control.
+*.pem
+*.p12
+*.pfx
+*.key
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.keychain
+*.keychain-db
+openssl.cnf
+
+# Local credentials / environment
+.env
+.env.*
+secrets.json
+
+# ---------------------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+
+# ---------------------------------------------------------------------------
+# Editors and tooling
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*~
+
+# Claude Code local machine settings (permissions, local overrides).
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Scratch
+# ---------------------------------------------------------------------------
+# Debug screenshots and sampler output collected while investigating issues.
+Screenshot*.png
+*.sample.txt
+tmp/
+*.log

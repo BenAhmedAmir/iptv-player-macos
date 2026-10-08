@@ -1,0 +1,640 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		038FBD4EE275567E3485CD9A /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538EE74119340590CDDDE321 /* AddSourceView.swift */; };
+		1BD9B0E72441CF0EBD2E2607 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3FEAA8D402E2B94F8E227A4 /* Profile.swift */; };
+		22BD29AFEC71956284A989D2 /* CachedImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3464BCCE41523CE0FC4F2E0B /* CachedImageView.swift */; };
+		2AACDD9EA8A7DE3C419B2177 /* ProfileSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7433667C2802E0DD1D9112 /* ProfileSelectionView.swift */; };
+		33DE779E2DE007F1222B3B2F /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1492A884A0ED1CC6211CC49D /* PlayerViewModel.swift */; };
+		376D9EE47B11686939EABFE1 /* IPTVSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78047DC9E21216222082D9C7 /* IPTVSource.swift */; };
+		3A6944F925201DC05C70CFE8 /* M3UParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8711725780E4EF7D85D914 /* M3UParserService.swift */; };
+		3CE9FF5CDC34F3870627CEA8 /* MainNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89E750519DBDA9E6738682B0 /* MainNavigationView.swift */; };
+		437F264F7EE4519B9891B3E4 /* XtreamAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8915EF406750B8BA74B85EF2 /* XtreamAPIService.swift */; };
+		5FA99ACF429DF11DC2119165 /* IPTVPlayerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02E696E3CE8708C1A342B542 /* IPTVPlayerTests.swift */; };
+		636B4C019C15EDFB956B59E8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B83688E21FD502315176EFD /* SettingsView.swift */; };
+		6A201EE6AD943E369BC29164 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C49856A0A3FF61421C3490 /* PlayerView.swift */; };
+		6CCE74856DCB60FB01476386 /* LiveTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 636A534FD6A3AA1D8448FE7C /* LiveTVView.swift */; };
+		7ACAECB4682976BDDA5426CB /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFBF00157A92AA58A9BDBBA9 /* FavoritesView.swift */; };
+		7FB0FA38D3185C4BC6F52725 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 91F471D253B8F7258C0372D0 /* Assets.xcassets */; };
+		801715ED78061C335B98C7AC /* PersistenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D4008ED6A1316F731B1F4A /* PersistenceController.swift */; };
+		8049207958F137E411A6E152 /* ChannelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731A78AFC649F8FA3BC8860D /* ChannelViewModel.swift */; };
+		846AD7533AF6AAFD434F0A1D /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7CCF45B5DA412002EE99B4 /* Channel.swift */; };
+		8E30E7D23059F5C79C12FD6F /* SourcesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16E749A48D6184543A5F7D4 /* SourcesView.swift */; };
+		9AD5BCFB7E88820B9E8F3530 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A475BC34157D7E73F2CB77F /* SettingsViewModel.swift */; };
+		9F91EBFE53B40B80BC3F179D /* IPTVPlayerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500598E3F2C4B438DBBC32F2 /* IPTVPlayerApp.swift */; };
+		ADB70E2BB630939E411270CA /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428E0E81956FE727B061285F /* AppModels.swift */; };
+		AF4777F4A316FC5B09942ED5 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A36422CEC7A1E7C793D277B /* KeychainService.swift */; };
+		B4EB4A51A909F52C98E34B4B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F7BCAE67CE9923BA76C4FD /* ContentView.swift */; };
+		CB8A421D5B8EF150CA434D7E /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B56D323EE89A518677928B6F /* ProfileViewModel.swift */; };
+		D29CD93ED5AEF25C2D9EB060 /* SourcesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C1EAF0C451A8A6FC41FEF49 /* SourcesViewModel.swift */; };
+		D56CDFE31AE45768F9943AD1 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49CF6C18DB4E5EAA336C93BA /* ImageCacheService.swift */; };
+		D9A552C7C1DEB84D730B0EAE /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60EAE84463F2F84558CEA0FB /* HomeView.swift */; };
+		FCDBF970B85E3FFF120B7F14 /* Favorite.swift in Sources */ = {isa = PBXBuildFile; fileRef = C380D8AF7D02FD2D52E01E70 /* Favorite.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8CF29844C5C55EA505D6A0ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB91D5AA0079060AA1D39217 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD8FC6EA2D50082894F50CB1;
+			remoteInfo = IPTVPlayer;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		02E696E3CE8708C1A342B542 /* IPTVPlayerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPTVPlayerTests.swift; sourceTree = "<group>"; };
+		1492A884A0ED1CC6211CC49D /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		22D4008ED6A1316F731B1F4A /* PersistenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceController.swift; sourceTree = "<group>"; };
+		3464BCCE41523CE0FC4F2E0B /* CachedImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedImageView.swift; sourceTree = "<group>"; };
+		3B83688E21FD502315176EFD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		428E0E81956FE727B061285F /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
+		47CBDF3EDE418CE1A9D38E3A /* IPTVPlayer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = IPTVPlayer.entitlements; sourceTree = "<group>"; };
+		49CF6C18DB4E5EAA336C93BA /* ImageCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheService.swift; sourceTree = "<group>"; };
+		4A475BC34157D7E73F2CB77F /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		4A8711725780E4EF7D85D914 /* M3UParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserService.swift; sourceTree = "<group>"; };
+		500598E3F2C4B438DBBC32F2 /* IPTVPlayerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPTVPlayerApp.swift; sourceTree = "<group>"; };
+		538EE74119340590CDDDE321 /* AddSourceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSourceView.swift; sourceTree = "<group>"; };
+		60EAE84463F2F84558CEA0FB /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		636A534FD6A3AA1D8448FE7C /* LiveTVView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTVView.swift; sourceTree = "<group>"; };
+		63F7BCAE67CE9923BA76C4FD /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		6A5E790D5CBE538127187872 /* IPTVPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IPTVPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6FBA0FCFD1651C15AC9FA2BF /* IPTVPlayerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IPTVPlayerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		731A78AFC649F8FA3BC8860D /* ChannelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelViewModel.swift; sourceTree = "<group>"; };
+		73D22CC7D414CEA989142B32 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		78047DC9E21216222082D9C7 /* IPTVSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPTVSource.swift; sourceTree = "<group>"; };
+		8915EF406750B8BA74B85EF2 /* XtreamAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamAPIService.swift; sourceTree = "<group>"; };
+		89E750519DBDA9E6738682B0 /* MainNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainNavigationView.swift; sourceTree = "<group>"; };
+		8A36422CEC7A1E7C793D277B /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		91F471D253B8F7258C0372D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9C1EAF0C451A8A6FC41FEF49 /* SourcesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesViewModel.swift; sourceTree = "<group>"; };
+		B3C49856A0A3FF61421C3490 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		B56D323EE89A518677928B6F /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		C380D8AF7D02FD2D52E01E70 /* Favorite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Favorite.swift; sourceTree = "<group>"; };
+		C3FEAA8D402E2B94F8E227A4 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		DB7433667C2802E0DD1D9112 /* ProfileSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSelectionView.swift; sourceTree = "<group>"; };
+		DB7CCF45B5DA412002EE99B4 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
+		F16E749A48D6184543A5F7D4 /* SourcesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesView.swift; sourceTree = "<group>"; };
+		FFBF00157A92AA58A9BDBBA9 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		1B1D9630CBE8D608736920F8 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				DB7433667C2802E0DD1D9112 /* ProfileSelectionView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		2CBEFE49835FAADE4C385ABA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6A5E790D5CBE538127187872 /* IPTVPlayer.app */,
+				6FBA0FCFD1651C15AC9FA2BF /* IPTVPlayerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		55779C62663F8DE266DDEFE8 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				3464BCCE41523CE0FC4F2E0B /* CachedImageView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		577D0F7DF7CDB24D76370DDE /* IPTVPlayerTests */ = {
+			isa = PBXGroup;
+			children = (
+				02E696E3CE8708C1A342B542 /* IPTVPlayerTests.swift */,
+			);
+			path = IPTVPlayerTests;
+			sourceTree = "<group>";
+		};
+		59C9503087DB7D1DF29CE6F2 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				428E0E81956FE727B061285F /* AppModels.swift */,
+				DB7CCF45B5DA412002EE99B4 /* Channel.swift */,
+				C380D8AF7D02FD2D52E01E70 /* Favorite.swift */,
+				78047DC9E21216222082D9C7 /* IPTVSource.swift */,
+				C3FEAA8D402E2B94F8E227A4 /* Profile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		5B6294AE160177BC45D9D439 /* IPTVPlayer */ = {
+			isa = PBXGroup;
+			children = (
+				A8097A4FACD5DE0CB20BFEB8 /* App */,
+				59C9503087DB7D1DF29CE6F2 /* Models */,
+				BA61249908D0A72E2DB7988D /* Services */,
+				D1903A427D9A641EA2C626BF /* ViewModels */,
+				94F100B80979C37E352405BE /* Views */,
+				91F471D253B8F7258C0372D0 /* Assets.xcassets */,
+				73D22CC7D414CEA989142B32 /* Info.plist */,
+				47CBDF3EDE418CE1A9D38E3A /* IPTVPlayer.entitlements */,
+			);
+			path = IPTVPlayer;
+			sourceTree = "<group>";
+		};
+		7A52FA8949DA620ABEC65E59 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				538EE74119340590CDDDE321 /* AddSourceView.swift */,
+				F16E749A48D6184543A5F7D4 /* SourcesView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		81B303AF9488E1FF5827BAD9 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				89E750519DBDA9E6738682B0 /* MainNavigationView.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		82495B20A0EFAEFADA4510F0 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				60EAE84463F2F84558CEA0FB /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		947723293F339E2202BEEE21 /* LiveTV */ = {
+			isa = PBXGroup;
+			children = (
+				FFBF00157A92AA58A9BDBBA9 /* FavoritesView.swift */,
+				636A534FD6A3AA1D8448FE7C /* LiveTVView.swift */,
+			);
+			path = LiveTV;
+			sourceTree = "<group>";
+		};
+		94F100B80979C37E352405BE /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				55779C62663F8DE266DDEFE8 /* Components */,
+				82495B20A0EFAEFADA4510F0 /* Home */,
+				947723293F339E2202BEEE21 /* LiveTV */,
+				81B303AF9488E1FF5827BAD9 /* Navigation */,
+				FB04C5569FE3E948E01EEAF2 /* Player */,
+				1B1D9630CBE8D608736920F8 /* Profile */,
+				B856596BFC9EDDE2D8A4FE2B /* Settings */,
+				7A52FA8949DA620ABEC65E59 /* Sources */,
+				63F7BCAE67CE9923BA76C4FD /* ContentView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A8097A4FACD5DE0CB20BFEB8 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				500598E3F2C4B438DBBC32F2 /* IPTVPlayerApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B856596BFC9EDDE2D8A4FE2B /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				3B83688E21FD502315176EFD /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		BA61249908D0A72E2DB7988D /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				49CF6C18DB4E5EAA336C93BA /* ImageCacheService.swift */,
+				8A36422CEC7A1E7C793D277B /* KeychainService.swift */,
+				4A8711725780E4EF7D85D914 /* M3UParserService.swift */,
+				22D4008ED6A1316F731B1F4A /* PersistenceController.swift */,
+				8915EF406750B8BA74B85EF2 /* XtreamAPIService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		D1903A427D9A641EA2C626BF /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				731A78AFC649F8FA3BC8860D /* ChannelViewModel.swift */,
+				1492A884A0ED1CC6211CC49D /* PlayerViewModel.swift */,
+				B56D323EE89A518677928B6F /* ProfileViewModel.swift */,
+				4A475BC34157D7E73F2CB77F /* SettingsViewModel.swift */,
+				9C1EAF0C451A8A6FC41FEF49 /* SourcesViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		FB04C5569FE3E948E01EEAF2 /* Player */ = {
+			isa = PBXGroup;
+			children = (
+				B3C49856A0A3FF61421C3490 /* PlayerView.swift */,
+			);
+			path = Player;
+			sourceTree = "<group>";
+		};
+		FCBE965933F6854474B79248 = {
+			isa = PBXGroup;
+			children = (
+				5B6294AE160177BC45D9D439 /* IPTVPlayer */,
+				577D0F7DF7CDB24D76370DDE /* IPTVPlayerTests */,
+				2CBEFE49835FAADE4C385ABA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6C9166B118BC8332F5E625B0 /* IPTVPlayerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9388010F10DBBACBF01CDDF4 /* Build configuration list for PBXNativeTarget "IPTVPlayerTests" */;
+			buildPhases = (
+				BA33663ACC0858D3F509D8BE /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				787C36BA60A0DCC0B7480957 /* PBXTargetDependency */,
+			);
+			name = IPTVPlayerTests;
+			packageProductDependencies = (
+			);
+			productName = IPTVPlayerTests;
+			productReference = 6FBA0FCFD1651C15AC9FA2BF /* IPTVPlayerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DD8FC6EA2D50082894F50CB1 /* IPTVPlayer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B27AD3616245E203E39AA85A /* Build configuration list for PBXNativeTarget "IPTVPlayer" */;
+			buildPhases = (
+				3F22B7D10281F6DA60F05EC3 /* Sources */,
+				77AE39763BF594DF26467702 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = IPTVPlayer;
+			packageProductDependencies = (
+			);
+			productName = IPTVPlayer;
+			productReference = 6A5E790D5CBE538127187872 /* IPTVPlayer.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB91D5AA0079060AA1D39217 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					6C9166B118BC8332F5E625B0 = {
+						ProvisioningStyle = Automatic;
+					};
+					DD8FC6EA2D50082894F50CB1 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = BA5CEF4ADB12121F6242BE1D /* Build configuration list for PBXProject "IPTVPlayer" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FCBE965933F6854474B79248;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2CBEFE49835FAADE4C385ABA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DD8FC6EA2D50082894F50CB1 /* IPTVPlayer */,
+				6C9166B118BC8332F5E625B0 /* IPTVPlayerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		77AE39763BF594DF26467702 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7FB0FA38D3185C4BC6F52725 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3F22B7D10281F6DA60F05EC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				038FBD4EE275567E3485CD9A /* AddSourceView.swift in Sources */,
+				ADB70E2BB630939E411270CA /* AppModels.swift in Sources */,
+				22BD29AFEC71956284A989D2 /* CachedImageView.swift in Sources */,
+				846AD7533AF6AAFD434F0A1D /* Channel.swift in Sources */,
+				8049207958F137E411A6E152 /* ChannelViewModel.swift in Sources */,
+				B4EB4A51A909F52C98E34B4B /* ContentView.swift in Sources */,
+				FCDBF970B85E3FFF120B7F14 /* Favorite.swift in Sources */,
+				7ACAECB4682976BDDA5426CB /* FavoritesView.swift in Sources */,
+				D9A552C7C1DEB84D730B0EAE /* HomeView.swift in Sources */,
+				9F91EBFE53B40B80BC3F179D /* IPTVPlayerApp.swift in Sources */,
+				376D9EE47B11686939EABFE1 /* IPTVSource.swift in Sources */,
+				D56CDFE31AE45768F9943AD1 /* ImageCacheService.swift in Sources */,
+				AF4777F4A316FC5B09942ED5 /* KeychainService.swift in Sources */,
+				6CCE74856DCB60FB01476386 /* LiveTVView.swift in Sources */,
+				3A6944F925201DC05C70CFE8 /* M3UParserService.swift in Sources */,
+				3CE9FF5CDC34F3870627CEA8 /* MainNavigationView.swift in Sources */,
+				801715ED78061C335B98C7AC /* PersistenceController.swift in Sources */,
+				6A201EE6AD943E369BC29164 /* PlayerView.swift in Sources */,
+				33DE779E2DE007F1222B3B2F /* PlayerViewModel.swift in Sources */,
+				1BD9B0E72441CF0EBD2E2607 /* Profile.swift in Sources */,
+				2AACDD9EA8A7DE3C419B2177 /* ProfileSelectionView.swift in Sources */,
+				CB8A421D5B8EF150CA434D7E /* ProfileViewModel.swift in Sources */,
+				636B4C019C15EDFB956B59E8 /* SettingsView.swift in Sources */,
+				9AD5BCFB7E88820B9E8F3530 /* SettingsViewModel.swift in Sources */,
+				8E30E7D23059F5C79C12FD6F /* SourcesView.swift in Sources */,
+				D29CD93ED5AEF25C2D9EB060 /* SourcesViewModel.swift in Sources */,
+				437F264F7EE4519B9891B3E4 /* XtreamAPIService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA33663ACC0858D3F509D8BE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5FA99ACF429DF11DC2119165 /* IPTVPlayerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		787C36BA60A0DCC0B7480957 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD8FC6EA2D50082894F50CB1 /* IPTVPlayer */;
+			targetProxy = 8CF29844C5C55EA505D6A0ED /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0B6C06EF57DED5C28042B5CE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_ARCHS[sdk=macosx*]" = x86_64;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IPTVPlayer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "IPTV Player";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iptvplayer.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				VALID_ARCHS = arm64;
+			};
+			name = Debug;
+		};
+		22508DF90464C21D37FA67EA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = IPTVPlayer/IPTVPlayer.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = IPTVPlayer/Info.plist;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_NAME = "IPTV Player";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		6EA390147FA983CA07AC7B71 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IPTV Player.app/Contents/MacOS/IPTV Player";
+			};
+			name = Debug;
+		};
+		765D39166C1E3F6F1D998844 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = IPTVPlayer/IPTVPlayer.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = IPTVPlayer/Info.plist;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				PRODUCT_NAME = "IPTV Player";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		D643FBC44AB8C4C04FFA12D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IPTV Player.app/Contents/MacOS/IPTV Player";
+			};
+			name = Release;
+		};
+		FE55C958AE60288DE728F3DB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_ARCHS[sdk=macosx*]" = x86_64;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IPTVPlayer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "IPTV Player";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iptvplayer.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				VALID_ARCHS = arm64;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		9388010F10DBBACBF01CDDF4 /* Build configuration list for PBXNativeTarget "IPTVPlayerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6EA390147FA983CA07AC7B71 /* Debug */,
+				D643FBC44AB8C4C04FFA12D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B27AD3616245E203E39AA85A /* Build configuration list for PBXNativeTarget "IPTVPlayer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				765D39166C1E3F6F1D998844 /* Debug */,
+				22508DF90464C21D37FA67EA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BA5CEF4ADB12121F6242BE1D /* Build configuration list for PBXProject "IPTVPlayer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0B6C06EF57DED5C28042B5CE /* Debug */,
+				FE55C958AE60288DE728F3DB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BB91D5AA0079060AA1D39217 /* Project object */;
+}
