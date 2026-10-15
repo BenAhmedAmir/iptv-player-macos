@@ -88,8 +88,11 @@ final class ChannelViewModel: ObservableObject {
     // MARK: - Categories
 
     private func extractCategories() {
-        let groups = Set(allChannels.compactMap { $0.group }).sorted()
-        categories = groups
+        var groups = Set(allChannels.compactMap { $0.group })
+        if hidesRestrictedContent {
+            groups = groups.filter { !ContentRestriction.isRestricted(category: $0) }
+        }
+        categories = groups.sorted()
     }
 
     // MARK: - Filtering
@@ -101,9 +104,17 @@ final class ChannelViewModel: ObservableObject {
     /// Folding the case once at load time removes that from the hot path.
     private var searchIndex: [String] = []
 
+    /// Per-category tallies, rebuilt with the channel list.
+    private var categoryCounts: [String: Int] = [:]
+
+    /// Set from the active profile. Kids profiles never see adult categories,
+    /// in the list or in the category sidebar.
+    var hidesRestrictedContent = false
+
     private var filterTask: Task<Void, Never>?
 
     private func rebuildSearchIndex() {
+        categoryCounts.removeAll()
         searchIndex = allChannels.map {
             ($0.name + " " + ($0.group ?? "")).lowercased()
         }
@@ -115,13 +126,15 @@ final class ChannelViewModel: ObservableObject {
         let sourceFilter = selectedSourceFilter
         let category = selectedCategory
         let query = searchText.lowercased()
+        let hideRestricted = hidesRestrictedContent
 
         // Small result sets are not worth a thread hop; the hitch only shows up
         // on large playlists.
         guard channels.count > 2_000 else {
             filteredChannels = Self.filter(
                 channels: channels, index: index,
-                sourceFilter: sourceFilter, category: category, query: query
+                sourceFilter: sourceFilter, category: category, query: query,
+                hideRestricted: hideRestricted
             )
             return
         }
@@ -131,7 +144,8 @@ final class ChannelViewModel: ObservableObject {
             let result = await Task.detached(priority: .userInitiated) {
                 Self.filter(
                     channels: channels, index: index,
-                    sourceFilter: sourceFilter, category: category, query: query
+                    sourceFilter: sourceFilter, category: category, query: query,
+                    hideRestricted: hideRestricted
                 )
             }.value
 
@@ -147,13 +161,15 @@ final class ChannelViewModel: ObservableObject {
         index: [String],
         sourceFilter: UUID?,
         category: String?,
-        query: String
+        query: String,
+        hideRestricted: Bool
     ) -> [Channel] {
         let useIndex = !query.isEmpty && index.count == channels.count
         var result: [Channel] = []
         result.reserveCapacity(min(channels.count, 512))
 
         for (position, channel) in channels.enumerated() {
+            if hideRestricted, ContentRestriction.isRestricted(category: channel.group) { continue }
             if let sourceFilter, channel.sourceID != sourceFilter { continue }
             if let category, channel.group != category { continue }
             if !query.isEmpty {
@@ -239,5 +255,16 @@ final class ChannelViewModel: ObservableObject {
     // MARK: - Channel Count
 
     var totalChannelCount: Int { allChannels.count }
+
+    /// Channel tally per category, for the counts beside the category list.
+    /// Cached because the sidebar asks for every category on each render.
+    func channelCount(inCategory category: String) -> Int {
+        if let cached = categoryCounts[category] { return cached }
+        let count = allChannels.reduce(into: 0) { total, channel in
+            if channel.group == category { total += 1 }
+        }
+        categoryCounts[category] = count
+        return count
+    }
     var filteredChannelCount: Int { filteredChannels.count }
 }

@@ -575,13 +575,32 @@ final class PlayerViewModel: NSObject, ObservableObject {
     private var positionsLoadedFor: UUID?
     private var lastPositionWrite: Date = .distantPast
 
-    /// Identity of whatever is playing, or nil for live TV (not resumable).
-    private var currentResumeKey: (sourceID: UUID, itemID: String, title: String)? {
+    /// Identity and presentation of whatever is playing, or nil for live TV
+    /// (not resumable).
+    private struct ResumeKey {
+        let sourceID: UUID
+        let itemID: String
+        let title: String
+        let streamURL: URL
+        let artworkURL: URL?
+        let subtitle: String
+        let isEpisode: Bool
+    }
+
+    private var currentResumeKey: ResumeKey? {
         if let movie = currentMovie {
-            return (movie.sourceID, movie.id, movie.name)
+            return ResumeKey(
+                sourceID: movie.sourceID, itemID: movie.id, title: movie.name,
+                streamURL: movie.streamURL, artworkURL: movie.posterURL,
+                subtitle: movie.categoryName ?? "Movie", isEpisode: false
+            )
         }
         if let episode = currentEpisode {
-            return (episode.sourceID, episode.id, episode.title)
+            return ResumeKey(
+                sourceID: episode.sourceID, itemID: episode.id, title: episode.title,
+                streamURL: episode.streamURL, artworkURL: pendingResumeArtwork ?? currentLogoURL,
+                subtitle: currentSubtitle, isEpisode: true
+            )
         }
         return nil
     }
@@ -621,19 +640,123 @@ final class PlayerViewModel: NSObject, ObservableObject {
             title: key.title,
             seconds: currentTime,
             duration: duration,
-            updatedAt: Date()
+            updatedAt: Date(),
+            streamURL: key.streamURL.absoluteString,
+            artworkURL: key.artworkURL?.absoluteString,
+            subtitle: key.subtitle,
+            isEpisode: key.isEpisode
         )
 
         positions.removeAll { $0.sourceID == key.sourceID && $0.itemID == key.itemID }
-        // Finished titles are dropped rather than stored, so they start over.
-        if entry.isResumable {
-            positions.insert(entry, at: 0)
-        }
+        // Finished titles are kept, not dropped. Knowing an episode was watched
+        // is what lets the series sheet offer the *next* one, and what makes
+        // "Hide watched" mean watched rather than merely in-progress. Resume
+        // callers filter on `isResumable`, so a finished entry never auto-plays.
+        positions.insert(entry, at: 0)
         // Bounded so the file cannot grow without limit.
         if positions.count > 200 {
             positions = Array(positions.prefix(200))
         }
         persistence.savePlaybackPositions(positions, profileID: profileID)
+    }
+
+    /// Saved progress for an episode as a 0...1 fraction, or nil when there is
+    /// none worth showing. Lets episode rows draw a progress bar without the
+    /// view touching persistence.
+    func savedProgress(for episode: Episode) -> Double? {
+        savedProgress(sourceID: episode.sourceID, itemID: episode.id)
+    }
+
+    /// Forgets an item's position, so "Start Over" genuinely starts over rather
+    /// than hitting the resume prompt again.
+    func clearSavedPosition(sourceID: UUID, itemID: String) {
+        guard let profileID = activeProfileID else { return }
+        loadPositionsIfNeeded()
+        positions.removeAll { $0.sourceID == sourceID && $0.itemID == itemID }
+        persistence.savePlaybackPositions(positions, profileID: profileID)
+    }
+
+    /// Raw saved position, including finished ones — the series sheet needs to
+    /// tell "watched" from "never started".
+    func playbackPosition(sourceID: UUID, itemID: String) -> PlaybackPosition? {
+        loadPositionsIfNeeded()
+        return positions.first { $0.sourceID == sourceID && $0.itemID == itemID }
+    }
+
+    /// Progress for any catalogue item, so poster cards can show a resume bar.
+    func savedProgress(sourceID: UUID, itemID: String) -> Double? {
+        loadPositionsIfNeeded()
+        guard let match = positions.first(where: {
+            $0.sourceID == sourceID && $0.itemID == itemID
+        }), match.isResumable, match.duration > 0 else {
+            return nil
+        }
+        return match.fractionComplete
+    }
+
+    /// Most recent resumable titles, newest first — drives Continue Watching.
+    func resumableItems(limit: Int = 3) -> [PlaybackPosition] {
+        loadPositionsIfNeeded()
+        return positions
+            .filter { $0.isResumable && $0.streamURL != nil }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    /// Reopens a saved position straight from the library, skipping the resume
+    /// prompt — picking a Continue Watching card already expresses the intent.
+    func resume(_ position: PlaybackPosition) {
+        guard let raw = position.streamURL, let url = URL(string: raw) else { return }
+
+        currentChannel = nil
+        currentMovie = nil
+        currentEpisode = nil
+        currentTitle = position.title
+        currentSubtitle = position.subtitle ?? ""
+        currentLogoURL = position.artworkURL.flatMap(URL.init(string:))
+        isLive = false
+        currentTime = 0
+        duration = position.duration
+
+        showPlayer = true
+        hasError = false
+        errorMessage = ""
+        clearPendingResume()
+        isLoading = true
+
+        loadViaVLC(url: url, resumeAt: position.seconds)
+    }
+
+    // MARK: - Live Channel Switching
+
+    /// Channels the player can move between, in the order the browser shows
+    /// them. Set when playback starts so ↑/↓ and "Try next channel" follow the
+    /// list the viewer was actually looking at.
+    var channelLineup: [Channel] = []
+
+    /// Category name for the lineup, shown in the drawer header.
+    var lineupCategory: String?
+
+    private var currentLineupIndex: Int? {
+        guard let current = currentChannel else { return nil }
+        return channelLineup.firstIndex { $0.compoundID == current.compoundID }
+    }
+
+    var canSwitchChannel: Bool { channelLineup.count > 1 && currentChannel != nil }
+
+    /// Moves `offset` places through the lineup, wrapping at both ends.
+    func switchChannel(by offset: Int) {
+        guard canSwitchChannel, let index = currentLineupIndex else { return }
+        let count = channelLineup.count
+        let next = ((index + offset) % count + count) % count
+        playChannel(channelLineup[next])
+    }
+
+    /// Used by the error state: the stream is dead, so move on rather than
+    /// retrying the same URL.
+    func playNextChannel() {
+        switchChannel(by: 1)
     }
 
     // MARK: - Playback Speed
@@ -673,6 +796,16 @@ final class PlayerViewModel: NSObject, ObservableObject {
             case .medium: return "M"
             case .large: return "L"
             case .extraLarge: return "XL"
+            }
+        }
+
+        /// Spelled out for Settings, where there is room for words.
+        var longLabel: String {
+            switch self {
+            case .small: return "Small"
+            case .medium: return "Medium"
+            case .large: return "Large"
+            case .extraLarge: return "Extra Large"
             }
         }
 

@@ -56,6 +56,21 @@ struct IPTVSource: Identifiable, Codable, Hashable {
     // Security-scoped bookmark for sandboxed file access
     var fileBookmark: Data?
 
+    /// Optional XMLTV guide endpoint supplied when the source was added.
+    /// Stored now so an EPG feature has it; nothing reads it yet.
+    var epgURL: String?
+
+    // Account facts captured at sign-in and on every refresh. Optional so
+    // sources saved before these existed still decode.
+
+    /// When the provider says the subscription lapses.
+    var expiresAt: Date?
+    /// Provider's own word for the account state, e.g. "Active".
+    var accountStatus: String?
+    /// Simultaneous streams the plan allows.
+    var maxConnections: Int?
+    var isTrialAccount: Bool?
+
     init(
         id: UUID = UUID(),
         profileID: UUID,
@@ -215,10 +230,24 @@ struct XtreamAccountInfo: Codable {
     }
 
     var isExpired: Bool {
-        guard let expStr = expirationDate, let expTimestamp = TimeInterval(expStr) else {
-            return false
+        guard let expiry = expiryDate else { return false }
+        return expiry < Date()
+    }
+
+    /// `exp_date` as a date. Providers send a Unix timestamp string, and some
+    /// send nothing at all for lifetime accounts.
+    var expiryDate: Date? {
+        guard let expStr = expirationDate,
+              let timestamp = TimeInterval(expStr),
+              timestamp > 0 else {
+            return nil
         }
-        return Date(timeIntervalSince1970: expTimestamp) < Date()
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    var maxConnectionCount: Int? {
+        guard let maxConnections, let value = Int(maxConnections), value > 0 else { return nil }
+        return value
     }
 }
 
@@ -286,6 +315,13 @@ struct XtreamCategory: Codable, Identifiable {
         case categoryID = "category_id"
         case categoryName = "category_name"
         case parentID = "parent_id"
+    }
+
+    /// Memberwise init for previews and tests; decoding uses the one below.
+    init(categoryID: String, categoryName: String, parentID: Int?) {
+        self.categoryID = categoryID
+        self.categoryName = categoryName
+        self.parentID = parentID
     }
 
     init(from decoder: Decoder) throws {

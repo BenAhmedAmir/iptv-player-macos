@@ -3,360 +3,365 @@ import UniformTypeIdentifiers
 
 // MARK: - Add Source View
 
-/// Sheet for adding a new IPTV source with live feedback and validation.
+/// Adds an Xtream Codes or M3U source, with inline validation.
+///
+/// Errors are reported under the field that caused them rather than in a shared
+/// banner, so a wrong password and an unreachable server do not look alike.
 struct AddSourceView: View {
     @EnvironmentObject var sourcesVM: SourcesViewModel
     @EnvironmentObject var profileVM: ProfileViewModel
-    @Environment(\.dismiss) var dismiss
+    @Environment(\.dismiss) private var dismiss
+
+    /// Where an M3U playlist comes from.
+    private enum PlaylistOrigin: String, CaseIterable, Identifiable {
+        case url, file
+        var id: String { rawValue }
+        var label: String { self == .url ? "URL" : "Local File" }
+    }
+
+    /// Which field an error belongs under.
+    private enum FieldError: Equatable {
+        case server(String)
+        case credentials(String)
+        case playlist(String)
+        case general(String)
+    }
 
     @State private var selectedType: IPTVSourceType = .xtreamCodes
+    @State private var origin: PlaylistOrigin = .url
     @State private var name = ""
 
-    // Xtream fields
+    // Xtream
     @State private var serverURL = ""
     @State private var username = ""
     @State private var password = ""
 
-    // M3U fields
-    @State private var localFilePath = ""
-    @State private var selectedFileURL: URL?
-    @State private var remoteURL = ""
+    // M3U
+    @State private var playlistURL = ""
+    @State private var pickedFile: URL?
+    @State private var epgURL = ""
 
-    @State private var isValidating = false
-    @State private var validationError: String?
-    @State private var isShowingFileImporter = false
+    @State private var isConnecting = false
+    @State private var fieldError: FieldError?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Source")
-                        .font(.title2.bold())
-                    Text("Configure an Xtream Codes or M3U playlist")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Add Source")
+                .font(.system(size: 17, weight: .semibold))
+
+            Picker("", selection: $selectedType) {
+                Text("Xtream Codes").tag(IPTVSourceType.xtreamCodes)
+                Text("M3U Playlist").tag(IPTVSourceType.m3uURL)
             }
-            .padding(20)
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Error message banner
-                    if let err = validationError ?? sourcesVM.error?.localizedDescription {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                            Text(err)
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                            Spacer()
-                        }
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.red.opacity(0.12))
-                        )
-                    }
-
-                    // Source type picker
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Source Type")
-                            .font(.headline)
-
-                        Picker("Type", selection: $selectedType) {
-                            ForEach(IPTVSourceType.allCases) { type in
-                                Label(type.displayName, systemImage: type.iconName)
-                                    .tag(type)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: selectedType) { _ in
-                            validationError = nil
-                            sourcesVM.error = nil
-                        }
-                    }
-
-                    // Name
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Source Name (Optional)")
-                            .font(.headline)
-                        TextField("e.g. My TV Provider", text: $name)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    // Type-specific fields
-                    switch selectedType {
-                    case .xtreamCodes:
-                        xtreamFields
-                    case .m3uFile:
-                        m3uFileFields
-                    case .m3uURL:
-                        m3uURLFields
-                    }
-                }
-                .padding(20)
+            field("Name") {
+                TextField("e.g. Living room provider", text: $name)
+                    .textFieldStyle(.roundedBorder)
             }
 
-            Divider()
-
-            // Actions
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-
-                Spacer()
-
-                Button {
-                    validateAndSubmit()
-                } label: {
-                    HStack(spacing: 8) {
-                        if isValidating {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                            Text("Connecting...")
-                        } else {
-                            Image(systemName: "plus.circle.fill")
-                            Text("Add Source")
-                        }
-                    }
-                    .frame(minWidth: 110)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(isValidating)
+            if selectedType == .xtreamCodes {
+                xtreamFields
+            } else {
+                m3uFields
             }
-            .padding(20)
+
+            if case .general(let message) = fieldError {
+                InlineError(message: message)
+            }
+
+            Text("Credentials are stored in your Keychain.")
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textTertiary)
+
+            footer
         }
-        .frame(width: 520, height: 500)
-        .fileImporter(
-            isPresented: $isShowingFileImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "m3u") ?? .plainText,
-                UTType(filenameExtension: "m3u8") ?? .plainText,
-                .plainText,
-                .data
-            ],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    // Store the actual URL for security-scoped access
-                    selectedFileURL = url
-                    localFilePath = url.path
-                    if name.isEmpty {
-                        name = url.deletingPathExtension().lastPathComponent
-                    }
-                    validationError = nil
-                }
-            case .failure(let error):
-                validationError = "Failed to select file: \(error.localizedDescription)"
-            }
-        }
-        .onAppear {
-            if sourcesVM.profileID == nil, let activeID = profileVM.activeProfile?.id {
-                sourcesVM.loadSources(profileID: activeID)
-            }
-        }
+        .padding(22)
+        .frame(width: 460)
+        .disabled(isConnecting)
     }
 
-    // MARK: - Xtream Fields
+    // MARK: - Fields
 
     private var xtreamFields: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Server URL")
-                        .font(.headline)
-                    Text("*")
-                        .foregroundColor(.red)
-                }
-                TextField("http://example.com:8080", text: $serverURL)
+            field("Server URL", error: serverError) {
+                TextField("http://provider.example:8080", text: $serverURL)
                     .textFieldStyle(.roundedBorder)
-                Text("Include the port if required (e.g., :8080 or :25461)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Username")
-                        .font(.headline)
-                    Text("*")
-                        .foregroundColor(.red)
+            HStack(alignment: .top, spacing: 10) {
+                field("Username") {
+                    TextField("", text: $username)
+                        .textFieldStyle(.roundedBorder)
                 }
-                TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.username)
+                field("Password") {
+                    SecureField("", text: $password)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Password")
-                        .font(.headline)
-                    Text("*")
-                        .foregroundColor(.red)
-                }
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
+            if case .credentials(let message) = fieldError {
+                InlineError(message: message)
             }
         }
     }
 
-    // MARK: - M3U File Fields
-
-    private var m3uFileFields: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Playlist File")
-                    .font(.headline)
-                Text("*")
-                    .foregroundColor(.red)
-            }
-
-            HStack {
-                TextField("/path/to/playlist.m3u or click Browse...", text: $localFilePath)
-                    .textFieldStyle(.roundedBorder)
-
-                Button("Browse...") {
-                    isShowingFileImporter = true
+    private var m3uFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("", selection: $origin) {
+                ForEach(PlaylistOrigin.allCases) { option in
+                    Text(option.label).tag(option)
                 }
-                .buttonStyle(.bordered)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
-            Text("Select an .m3u or .m3u8 playlist file on your Mac.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    // MARK: - M3U URL Fields
-
-    private var m3uURLFields: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Playlist URL")
-                    .font(.headline)
-                Text("*")
-                    .foregroundColor(.red)
-            }
-
-            TextField("https://example.com/playlist.m3u8", text: $remoteURL)
-                .textFieldStyle(.roundedBorder)
-
-            Text("Enter the full HTTP or HTTPS URL to an M3U or M3U8 stream list.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    // MARK: - Validation & Submission
-
-    private func validateAndSubmit() {
-        validationError = nil
-        sourcesVM.error = nil
-
-        // Ensure profile is connected
-        if sourcesVM.profileID == nil {
-            if let activeID = profileVM.activeProfile?.id {
-                sourcesVM.loadSources(profileID: activeID)
+            if origin == .url {
+                field("Playlist URL", error: playlistError) {
+                    TextField("https://provider.example/playlist.m3u", text: $playlistURL)
+                        .textFieldStyle(.roundedBorder)
+                }
             } else {
-                validationError = "No active profile selected. Please select a profile first."
+                field("Playlist file", error: playlistError) {
+                    HStack(spacing: 10) {
+                        // Shows the chosen filename rather than a full path,
+                        // which would truncate to uselessness in this width.
+                        Text(pickedFile?.lastPathComponent ?? "No file chosen")
+                            .font(.system(size: 13))
+                            .foregroundColor(pickedFile == nil ? Theme.textTertiary : Theme.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Button("Choose…", action: chooseFile)
+                    }
+                }
+            }
+
+            field("EPG URL (optional)") {
+                TextField("https://provider.example/guide.xml", text: $epgURL)
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func field<Content: View>(
+        _ label: String,
+        error: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textSecondary)
+            content()
+            if let error {
+                InlineError(message: error)
+            }
+        }
+    }
+
+    private var serverError: String? {
+        if case .server(let message) = fieldError { return message }
+        return nil
+    }
+
+    private var credentialsError: String? {
+        if case .credentials(let message) = fieldError { return message }
+        return nil
+    }
+
+    private var playlistError: String? {
+        if case .playlist(let message) = fieldError { return message }
+        return nil
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            if isConnecting {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Connecting…")
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.textSecondary)
+            }
+
+            Spacer()
+
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+
+            Button("Add") { submit() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canSubmit || isConnecting)
+        }
+    }
+
+    private var canSubmit: Bool {
+        switch selectedType {
+        case .xtreamCodes:
+            return !serverURL.trimmed.isEmpty && !username.trimmed.isEmpty && !password.trimmed.isEmpty
+        default:
+            return origin == .url ? !playlistURL.trimmed.isEmpty : pickedFile != nil
+        }
+    }
+
+    // MARK: - Actions
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a Playlist"
+        panel.prompt = "Choose"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        let types = ["m3u", "m3u8"].compactMap { UTType(filenameExtension: $0) }
+        if !types.isEmpty { panel.allowedContentTypes = types }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        pickedFile = url
+        fieldError = nil
+        if name.trimmed.isEmpty {
+            name = url.deletingPathExtension().lastPathComponent
+        }
+    }
+
+    private func submit() {
+        fieldError = nil
+
+        // Validate locally first so an obviously malformed URL is reported
+        // against its own field instead of as a network failure.
+        if selectedType == .xtreamCodes {
+            guard isValidURL(serverURL) else {
+                fieldError = .server("Enter a full address, including http:// or https://.")
+                return
+            }
+        } else if origin == .url {
+            guard isValidURL(playlistURL) else {
+                fieldError = .playlist("Enter a full playlist address, including https://.")
                 return
             }
         }
+
+        isConnecting = true
+        Task {
+            await performAdd()
+            isConnecting = false
+        }
+    }
+
+    private func performAdd() async {
+        let resolvedName = name.trimmed.isEmpty ? defaultName : name.trimmed
 
         switch selectedType {
         case .xtreamCodes:
-            let trimmedServer = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedUser = username.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedPass = password.trimmingCharacters(in: .whitespacesAndNewlines)
+            await sourcesVM.addXtreamSource(
+                name: resolvedName,
+                serverURL: serverURL.trimmed,
+                username: username.trimmed,
+                password: password
+            )
+        default:
+            if origin == .url {
+                await sourcesVM.addM3UURLSource(name: resolvedName, url: playlistURL.trimmed)
+            } else if let pickedFile {
+                await sourcesVM.addM3UFileSource(name: resolvedName, fileURL: pickedFile)
+            }
+        }
 
-            if trimmedServer.isEmpty {
-                validationError = "Please enter the server URL."
-                return
-            }
-            if trimmedUser.isEmpty {
-                validationError = "Please enter your username."
-                return
-            }
-            if trimmedPass.isEmpty {
-                validationError = "Please enter your password."
-                return
-            }
-
-            var formattedServer = trimmedServer
-            if !formattedServer.lowercased().hasPrefix("http://") && !formattedServer.lowercased().hasPrefix("https://") {
-                formattedServer = "http://" + formattedServer
-                serverURL = formattedServer
-            }
-
-            Task {
-                await executeAdd {
-                    await sourcesVM.addXtreamSource(
-                        name: name,
-                        serverURL: formattedServer,
-                        username: trimmedUser,
-                        password: trimmedPass
-                    )
-                }
-            }
-
-        case .m3uFile:
-            let trimmedPath = localFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmedPath.isEmpty {
-                validationError = "Please browse or enter the path to an M3U/M3U8 file."
-                return
-            }
-
-            Task {
-                await executeAdd {
-                    // Use the security-scoped URL if available, otherwise create from path
-                    let fileURL = selectedFileURL ?? URL(fileURLWithPath: trimmedPath)
-                    await sourcesVM.addM3UFileSource(name: name, fileURL: fileURL)
-                }
-            }
-
-        case .m3uURL:
-            let trimmedURL = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmedURL.isEmpty {
-                validationError = "Please enter a playlist URL."
-                return
-            }
-
-            var formattedURL = trimmedURL
-            if !formattedURL.lowercased().hasPrefix("http://") && !formattedURL.lowercased().hasPrefix("https://") {
-                formattedURL = "http://" + formattedURL
-                remoteURL = formattedURL
-            }
-
-            Task {
-                await executeAdd {
-                    await sourcesVM.addM3UURLSource(name: name, url: formattedURL)
-                }
-            }
+        if let error = sourcesVM.error {
+            // Suppress the view model's own alert; this sheet shows the message
+            // against the field that caused it.
+            sourcesVM.showError = false
+            sourcesVM.error = nil
+            fieldError = mapped(error)
+        } else {
+            sourcesVM.persistEPGURL(epgURL.trimmed, forMostRecentSource: true)
+            dismiss()
         }
     }
 
-    private func executeAdd(action: () async -> Void) async {
-        isValidating = true
-        defer { isValidating = false }
-
-        await action()
-
-        if sourcesVM.error == nil {
-            dismiss()
+    private func mapped(_ error: IPTVError) -> FieldError {
+        switch error {
+        case .invalidCredentials, .expiredAccount:
+            return .credentials(error.localizedDescription)
+        case .serverUnavailable, .timeout, .networkUnavailable:
+            return selectedType == .xtreamCodes
+                ? .server(error.localizedDescription)
+                : .playlist(error.localizedDescription)
+        case .invalidM3U, .emptyM3U, .fileNotFound:
+            return .playlist(error.localizedDescription)
+        default:
+            return .general(error.localizedDescription)
         }
+    }
+
+    private var defaultName: String {
+        selectedType == .xtreamCodes ? "Xtream Source" : "M3U Playlist"
+    }
+
+    private func isValidURL(_ string: String) -> Bool {
+        guard let url = URL(string: string.trimmed),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host?.isEmpty == false else {
+            return false
+        }
+        return true
+    }
+}
+
+// MARK: - Inline Error
+
+/// Error text shown directly beneath the field that produced it.
+struct InlineError: View {
+    let message: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 11))
+            Text(message)
+                .font(.system(size: 12))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(Theme.destructive)
+    }
+}
+
+private extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+}
+
+// MARK: - Previews
+
+struct AddSourceView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            AddSourceView()
+                .previewDisplayName("Add Source — Dark")
+                .preferredColorScheme(.dark)
+
+            AddSourceView()
+                .previewDisplayName("Add Source — Light")
+                .preferredColorScheme(.light)
+        }
+        .environmentObject(SourcesViewModel())
+        .environmentObject(ProfileViewModel())
+    }
+}
+
+struct InlineError_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            InlineError(message: "Invalid username or password. Please check your credentials.")
+            InlineError(message: "The server is currently unavailable. Please try again later.")
+        }
+        .padding()
+        .preferredColorScheme(.dark)
     }
 }

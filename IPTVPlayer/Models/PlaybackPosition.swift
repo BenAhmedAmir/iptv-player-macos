@@ -18,6 +18,19 @@ struct PlaybackPosition: Codable, Identifiable, Equatable {
     var duration: Double
     var updatedAt: Date
 
+    // Optional so files written before these existed still decode.
+
+    /// Stream to reopen. Without it, Continue Watching could only navigate to
+    /// the library rather than resume, because a saved position alone cannot be
+    /// resolved back to a title that may not be in the loaded category.
+    var streamURL: String?
+    /// Poster or cover art for the Continue Watching card.
+    var artworkURL: String?
+    /// Secondary line — the category for a movie, "S1 · E4 · …" for an episode.
+    var subtitle: String?
+    /// Distinguishes a movie from an episode for the card's badge.
+    var isEpisode: Bool?
+
     var id: String { "\(sourceID.uuidString):\(itemID)" }
 
     /// Below this, the viewer has barely started and resuming would be noise.

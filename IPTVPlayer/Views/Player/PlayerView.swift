@@ -18,6 +18,7 @@ struct PlayerView: View {
     @State private var lastControlsWake = Date.distantPast
     @State private var keyMonitor: Any?
     @State private var subtitleLoadFailure: String?
+    @State private var showChannelDrawer = false
 
     private var speedLabel: String {
         playerVM.playbackSpeed == 1 ? "1×" : "\(playerVM.playbackSpeed.formatted())×"
@@ -57,6 +58,14 @@ struct PlayerView: View {
             if controlsVisible {
                 controlsOverlay
             }
+
+            if showChannelDrawer && playerVM.canSwitchChannel && controlsVisible {
+                HStack(spacing: 0) {
+                    Spacer()
+                    channelDrawer
+                }
+                .transition(.move(edge: .trailing))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
@@ -93,10 +102,11 @@ struct PlayerView: View {
     /// player left no reliable way to get them back: the video surfaces are
     /// AppKit views (AVPlayerLayer host, VLCVideoView) which swallow mouse-moved
     /// events, so SwiftUI's hover modifiers never fired over them.
+    /// Controls auto-hide everywhere after 3s of stillness, and stay up while
+    /// paused, erroring, or waiting on the resume prompt.
     private var controlsVisible: Bool {
         guard playerVM.pendingResumeSeconds == nil else { return false }
         guard !playerVM.hasError, !playerVM.isLoading else { return false }
-        guard playerVM.isFullscreen else { return true }
         return showControls || !playerVM.isPlaying
     }
 
@@ -120,8 +130,10 @@ struct PlayerView: View {
     /// The throttle matters: mouse-moved fires ~100 times a second and this used
     /// to cancel and allocate a Task on every one of them.
     private func wakeControls() {
-        guard playerVM.isFullscreen else { return }
-        if !showControls { showControls = true }
+        if !showControls {
+            showControls = true
+            NSCursor.unhide()
+        }
 
         let now = Date()
         guard now.timeIntervalSince(lastControlsWake) > 0.5 else { return }
@@ -162,6 +174,10 @@ struct PlayerView: View {
             }
 
             switch event.keyCode {
+            case 126:                                           // ↑
+                if playerVM.isLive { playerVM.switchChannel(by: -1) } else { return event }
+            case 125:                                           // ↓
+                if playerVM.isLive { playerVM.switchChannel(by: 1) } else { return event }
             case 49: playerVM.togglePlayPause()                 // space
             case 3:  playerVM.toggleFullscreen()                // f
             case 46: playerVM.toggleMute()                      // m
@@ -308,9 +324,7 @@ struct PlayerView: View {
                                     .frame(width: 260)
                             }
 
-                            Text(playerVM.pendingResumeDuration.map {
-                                "Stopped at \(playerVM.formatTime(seconds)) of \(playerVM.formatTime($0))"
-                            } ?? "Stopped at \(playerVM.formatTime(seconds))")
+                            Text("Continue watching from \(playerVM.formatTime(seconds))?")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.65))
                         }
@@ -362,42 +376,50 @@ struct PlayerView: View {
     // MARK: - Error
 
     private var errorOverlay: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 48))
-                .foregroundColor(.orange)
+                .font(.system(size: 40))
+                .foregroundColor(Theme.warning)
 
             Text("Unable to play stream")
-                .font(.title2.bold())
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(.white)
 
-            Text(playerVM.errorMessage)
-                .font(.subheadline)
-                .foregroundColor(.white.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-
-            HStack(spacing: 16) {
-                Button {
-                    playerVM.retry()
-                } label: {
-                    Label("Retry", systemImage: "arrow.clockwise")
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button {
-                    playerVM.stop()
-                } label: {
-                    Text("Back")
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.bordered)
-                .tint(.white)
+            if !playerVM.currentTitle.isEmpty {
+                Text(playerVM.currentTitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.75))
+                    .lineLimit(1)
             }
+
+            Text(playerVM.errorMessage)
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                Button { playerVM.retry() } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(DesignPrimaryButtonStyle(horizontalPadding: 16, verticalPadding: 7))
+
+                // Retrying a dead channel rarely helps; moving on usually does.
+                if playerVM.canSwitchChannel {
+                    Button { playerVM.playNextChannel() } label: {
+                        Label("Try Next Channel", systemImage: "forward.fill")
+                    }
+                    .buttonStyle(DesignSecondaryButtonStyle(horizontalPadding: 14, verticalPadding: 7))
+                }
+
+                Button("Back") { playerVM.stop() }
+                    .buttonStyle(DesignSecondaryButtonStyle(horizontalPadding: 14, verticalPadding: 7))
+            }
+            .padding(.top, 4)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.85).ignoresSafeArea())
     }
 
     // MARK: - Controls Overlay
@@ -621,6 +643,20 @@ struct PlayerView: View {
                         }
                     }
 
+                    // Channel drawer, live only.
+                    if playerVM.canSwitchChannel {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) { showChannelDrawer.toggle() }
+                        } label: {
+                            Image(systemName: "list.bullet.rectangle")
+                                .font(.title3)
+                                .foregroundColor(showChannelDrawer ? Theme.accent : .white)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Channels")
+                    }
+
                     // Picture-in-Picture (live only — libVLC has no PiP equivalent)
                     if playerVM.isPictureInPictureAvailable {
                         Button {
@@ -659,6 +695,116 @@ struct PlayerView: View {
         }
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.25), value: showControls)
+    }
+
+    // MARK: - Channel Drawer
+
+    /// Slide-over channel list for live playback.
+    ///
+    /// The design pairs each row with its current programme; without EPG the
+    /// category stands in. ‹ › step through categories, matching the spec.
+    private var channelDrawer: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button { stepCategory(-1) } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.small).fill(Theme.fillStrong))
+                }
+                .buttonStyle(.plain)
+                .disabled(drawerCategories.count < 2)
+
+                Text(playerVM.lineupCategory ?? "All Channels")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+
+                Button { stepCategory(1) } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.small).fill(Theme.fillStrong))
+                }
+                .buttonStyle(.plain)
+                .disabled(drawerCategories.count < 2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.top, 46)
+            .padding(.bottom, 12)
+
+            Divider().overlay(Color.white.opacity(0.08))
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(playerVM.channelLineup.enumerated()), id: \.element.compoundID) { index, channel in
+                        let isCurrent = playerVM.currentChannel?.compoundID == channel.compoundID
+                        Button {
+                            playerVM.playChannel(channel)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Text("\(index + 1)")
+                                    .font(.system(size: 11).monospacedDigit())
+                                    .foregroundColor(.white.opacity(0.55))
+                                    .frame(width: 24, alignment: .trailing)
+
+                                LogoTile(name: channel.name, logoURL: channel.logoURL, size: 34)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(channel.name)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                    Text(channel.group ?? "Live TV")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.white.opacity(0.65))
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 9)
+                            .background(isCurrent ? Theme.accent.opacity(0.35) : .clear)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Divider().overlay(Color.white.opacity(0.08))
+
+            Text("↑ ↓ to switch · ‹ › to change category")
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.55))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+        }
+        .frame(width: Theme.Metrics.inspectorWidth)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1)
+        }
+    }
+
+    /// Categories available to step through, drawn from the lineup itself.
+    private var drawerCategories: [String] {
+        var seen = Set<String>()
+        return playerVM.channelLineup.compactMap { channel in
+            guard let group = channel.group, seen.insert(group).inserted else { return nil }
+            return group
+        }
+    }
+
+    private func stepCategory(_ offset: Int) {
+        let categories = drawerCategories
+        guard categories.count > 1 else { return }
+        let current = categories.firstIndex { $0 == playerVM.lineupCategory } ?? 0
+        let next = ((current + offset) % categories.count + categories.count) % categories.count
+        playerVM.lineupCategory = categories[next]
     }
 
     // MARK: - Track Picker
@@ -818,13 +964,14 @@ struct PlayerView: View {
     private func resetControlsTimer() {
         controlsTimer?.cancel()
         controlsTimer = Task {
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            if !Task.isCancelled {
-                await MainActor.run {
-                    withAnimation {
-                        showControls = false
-                    }
-                }
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                // Only hide while something is actually playing — a paused or
+                // errored player keeps its controls.
+                guard playerVM.isPlaying, !playerVM.hasError else { return }
+                withAnimation { showControls = false }
+                NSCursor.setHiddenUntilMouseMoves(true)
             }
         }
     }
@@ -879,5 +1026,52 @@ struct NativePlayerView: NSViewRepresentable {
             nsView.playerLayer.player = player
         }
         onLayerReady(nsView.playerLayer)
+    }
+}
+
+// MARK: - Previews
+
+/// Player states are previewed as their own overlays: the live player needs an
+/// AVPlayer and libVLC surface that cannot render in a canvas.
+struct PlayerStates_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            errorState
+                .previewDisplayName("Player error — Dark")
+                .preferredColorScheme(.dark)
+
+            errorState
+                .previewDisplayName("Player error — Light")
+                .preferredColorScheme(.light)
+        }
+        .frame(width: 760, height: 460)
+    }
+
+    private static var errorState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundColor(Theme.warning)
+            Text("Unable to play stream")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.white)
+            Text("BBC News HD")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.75))
+            Text("The server is currently unavailable. Please try again later.")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.6))
+            HStack(spacing: 12) {
+                Button { } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                    .buttonStyle(DesignPrimaryButtonStyle(horizontalPadding: 16, verticalPadding: 7))
+                Button { } label: { Label("Try Next Channel", systemImage: "forward.fill") }
+                    .buttonStyle(DesignSecondaryButtonStyle(horizontalPadding: 14, verticalPadding: 7))
+                Button("Back") { }
+                    .buttonStyle(DesignSecondaryButtonStyle(horizontalPadding: 14, verticalPadding: 7))
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.85))
     }
 }

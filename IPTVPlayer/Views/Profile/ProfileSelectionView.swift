@@ -2,97 +2,56 @@ import SwiftUI
 
 // MARK: - Profile Selection View
 
-/// Full-screen profile picker shown on launch or when switching profiles.
+/// "Who's watching?" picker.
 struct ProfileSelectionView: View {
     @EnvironmentObject var profileVM: ProfileViewModel
-    @State private var newName = ""
+
     @State private var isCreating = false
     @State private var hoveredProfile: UUID?
+    @State private var profileToDelete: Profile?
+    @State private var showDeleteConfirm = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        VStack(spacing: 44) {
+            Text("Who's watching?")
+                .font(.system(size: 32, weight: .bold))
+                .tracking(-0.6)
+                .foregroundColor(Theme.textPrimary)
 
-            // Title
-            VStack(spacing: 8) {
-                Image(systemName: "tv")
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(.linearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-
-                Text("IPTV Player")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-
-                Text("Who's watching?")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.bottom, 40)
-
-            // Profile grid
-            if !profileVM.profiles.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 20)], spacing: 20) {
-                    ForEach(profileVM.profiles) { profile in
-                        ProfileCard(
-                            profile: profile,
-                            isHovered: hoveredProfile == profile.id
-                        )
-                        .onTapGesture {
-                            profileVM.selectProfile(profile)
+            HStack(alignment: .top, spacing: 40) {
+                ForEach(profileVM.profiles) { profile in
+                    ProfileCard(
+                        profile: profile,
+                        sourceCount: profileVM.sourceCount(for: profile),
+                        isHovered: hoveredProfile == profile.id
+                    )
+                    .onTapGesture { profileVM.selectProfile(profile) }
+                    .onHover { hoveredProfile = $0 ? profile.id : nil }
+                    .contextMenu {
+                        Button("Rename…") {
+                            profileVM.profileToRename = profile
+                            profileVM.isShowingRenameProfile = true
                         }
-                        .onHover { isHovering in
-                            hoveredProfile = isHovering ? profile.id : nil
-                        }
-                        .contextMenu {
-                            Button("Rename") {
-                                profileVM.profileToRename = profile
-                                newName = profile.name
-                                profileVM.isShowingRenameProfile = true
-                            }
-
-                            Divider()
-
-                            Button("Delete", role: .destructive) {
-                                profileVM.deleteProfile(profile)
-                            }
+                        Divider()
+                        Button("Delete…", role: .destructive) {
+                            profileToDelete = profile
+                            showDeleteConfirm = true
                         }
                     }
                 }
-                .padding(.horizontal, 60)
+
+                addProfileButton
             }
 
-            // Add profile button
-            Button {
-                isCreating = true
-                newName = ""
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                    Text("Add Profile")
-                        .font(.headline)
-                }
-                .foregroundColor(.blue)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.blue.opacity(0.1))
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 30)
-
-            Spacer()
+            Text("Each profile keeps its own sources, favorites and watch history.")
+                .font(.system(size: 13))
+                .foregroundColor(Theme.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(backdrop)
         .sheet(isPresented: $isCreating) {
-            CreateProfileSheet(isPresented: $isCreating) { name in
-                profileVM.createProfile(name: name)
+            CreateProfileSheet(isPresented: $isCreating) { name, colorID, isKids in
+                profileVM.createProfile(name: name, avatarColorID: colorID, isKids: isKids)
             }
         }
         .sheet(isPresented: $profileVM.isShowingRenameProfile) {
@@ -106,6 +65,58 @@ struct ProfileSelectionView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete “\(profileToDelete?.name ?? "")”?",
+            isPresented: $showDeleteConfirm
+        ) {
+            Button("Delete Profile", role: .destructive) {
+                if let profile = profileToDelete {
+                    profileVM.deleteProfile(profile)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Its sources, favorites and watch history are removed. This cannot be undone.")
+        }
+    }
+
+    /// Soft wash behind the picker, tuned per appearance.
+    private var backdrop: some View {
+        RadialGradient(
+            colors: [Theme.surfaceRaised, Theme.backdrop],
+            center: UnitPoint(x: 0.5, y: 0.3),
+            startRadius: 0,
+            endRadius: 700
+        )
+        .ignoresSafeArea()
+    }
+
+    /// Dashed placeholder matching the avatar footprint so the row stays aligned.
+    private var addProfileButton: some View {
+        Button {
+            isCreating = true
+        } label: {
+            VStack(spacing: 14) {
+                Circle()
+                    .strokeBorder(
+                        Theme.textTertiary.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 2, dash: [6, 5])
+                    )
+                    .frame(width: 128, height: 128)
+                    .overlay(
+                        Image(systemName: "plus")
+                            .font(.system(size: 40, weight: .thin))
+                            .foregroundColor(Theme.textSecondary)
+                    )
+                Text("Add Profile")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Theme.textSecondary)
+                Text(" ")
+                    .font(.system(size: 12))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -113,81 +124,144 @@ struct ProfileSelectionView: View {
 
 struct ProfileCard: View {
     let profile: Profile
+    let sourceCount: Int
     let isHovered: Bool
 
-    private let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal]
-
-    private var profileColor: Color {
-        colors[abs(profile.name.hashValue) % colors.count]
-    }
-
     var body: some View {
-        VStack(spacing: 12) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(profileColor.gradient)
-                    .frame(width: 80, height: 80)
-
-                Text(profile.name.prefix(1).uppercased())
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-            }
-            .shadow(color: profileColor.opacity(isHovered ? 0.5 : 0.2), radius: isHovered ? 12 : 4)
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+        VStack(spacing: 14) {
+            Circle()
+                .fill(AvatarPalette.gradient(for: profile.avatarColorID))
+                .frame(width: 128, height: 128)
+                .overlay(
+                    Text(profile.name.prefix(1).uppercased())
+                        .font(.system(size: 52, weight: .semibold))
+                        .foregroundColor(.white)
+                )
+                .overlay(alignment: .bottomTrailing) {
+                    if profile.isRestricted {
+                        Image(systemName: "figure.and.child.holdinghands")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(7)
+                            .background(Circle().fill(Theme.accent))
+                            .overlay(Circle().stroke(Theme.backdrop, lineWidth: 3))
+                    }
+                }
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 6)
+                .opacity(isHovered ? 0.85 : 1)
 
             Text(profile.name)
-                .font(.subheadline.weight(.medium))
-                .foregroundColor(.primary)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Theme.textPrimary)
                 .lineLimit(1)
+
+            // Kids profiles say so; everyone else gets their source count.
+            Text(profile.isRestricted
+                 ? "Restricted"
+                 : (sourceCount == 1 ? "1 source" : "\(sourceCount) sources"))
+                .font(.system(size: 12))
+                .foregroundColor(profile.isRestricted ? Theme.accent : Theme.textTertiary)
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 8)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+        .contentShape(Rectangle())
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 }
 
 // MARK: - Create Profile Sheet
 
+/// Name, avatar colour and the kids toggle.
 struct CreateProfileSheet: View {
     @Binding var isPresented: Bool
-    let onCreate: (String) -> Void
+    /// name, avatar swatch id, isKids
+    let onCreate: (String, String, Bool) -> Void
+
     @State private var name = ""
+    @State private var colorID = AvatarPalette.swatches[0].id
+    @State private var isKids = false
     @FocusState private var isFocused: Bool
 
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Create Profile")
-                .font(.title2.bold())
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
-            TextField("Profile name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .focused($isFocused)
-                .frame(width: 280)
-                .onSubmit {
-                    if !name.trimmingCharacters(in: .whitespaces).isEmpty {
-                        onCreate(name)
-                        isPresented = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Create Profile")
+                .font(.system(size: 17, weight: .semibold))
+
+            HStack(spacing: 16) {
+                Circle()
+                    .fill(AvatarPalette.gradient(for: colorID))
+                    .frame(width: 64, height: 64)
+                    .overlay(
+                        Text(name.isEmpty ? "?" : name.prefix(1).uppercased())
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundColor(.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name")
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.textSecondary)
+                    TextField("e.g. Alex", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isFocused)
+                        .onSubmit { if canCreate { create() } }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Avatar colour")
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.textSecondary)
+
+                HStack(spacing: 10) {
+                    ForEach(AvatarPalette.swatches, id: \.id) { swatch in
+                        Button {
+                            colorID = swatch.id
+                        } label: {
+                            Circle()
+                                .fill(swatch.color)
+                                .frame(width: 28, height: 28)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Theme.textPrimary, lineWidth: colorID == swatch.id ? 2.5 : 0)
+                                        .padding(-3)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .help(swatch.id.capitalized)
                     }
                 }
+            }
 
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    isPresented = false
+            Toggle(isOn: $isKids) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Kids profile")
+                    Text("Hides adult categories and shows a “Restricted” caption.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.textTertiary)
                 }
-                .keyboardShortcut(.cancelAction)
+            }
+            .toggleStyle(.switch)
 
-                Button("Create") {
-                    onCreate(name)
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            HStack {
+                Spacer()
+                Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Create") { create() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canCreate)
             }
         }
-        .padding(30)
-        .frame(width: 360)
+        .padding(24)
+        .frame(width: 400)
         .onAppear { isFocused = true }
+    }
+
+    private func create() {
+        onCreate(name, colorID, isKids)
+        isPresented = false
     }
 }
 
@@ -198,44 +272,80 @@ struct RenameSheet: View {
     let currentName: String
     @Binding var isPresented: Bool
     let onRename: (String) -> Void
+
     @State private var name: String = ""
     @FocusState private var isFocused: Bool
 
+    private var canRename: Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && trimmed != currentName
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             Text(title)
-                .font(.title2.bold())
+                .font(.system(size: 17, weight: .semibold))
 
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
                 .focused($isFocused)
-                .frame(width: 280)
-                .onSubmit {
-                    if !name.trimmingCharacters(in: .whitespaces).isEmpty {
-                        onRename(name)
-                        isPresented = false
-                    }
-                }
+                .onSubmit { if canRename { rename() } }
 
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    isPresented = false
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button("Rename") {
-                    onRename(name)
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            HStack {
+                Spacer()
+                Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Rename") { rename() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canRename)
             }
         }
-        .padding(30)
+        .padding(24)
         .frame(width: 360)
         .onAppear {
             name = currentName
             isFocused = true
+        }
+    }
+
+    private func rename() {
+        onRename(name)
+        isPresented = false
+    }
+}
+
+// MARK: - Previews
+
+struct ProfileSelectionView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            ProfileSelectionView()
+                .previewDisplayName("Profiles — Dark")
+                .preferredColorScheme(.dark)
+
+            ProfileSelectionView()
+                .previewDisplayName("Profiles — Light")
+                .preferredColorScheme(.light)
+        }
+        .environmentObject(ProfileViewModel())
+        .frame(width: 900, height: 560)
+    }
+}
+
+struct ProfileSheets_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            CreateProfileSheet(isPresented: .constant(true)) { _, _, _ in }
+                .previewDisplayName("Create Profile — Dark")
+                .preferredColorScheme(.dark)
+
+            CreateProfileSheet(isPresented: .constant(true)) { _, _, _ in }
+                .previewDisplayName("Create Profile — Light")
+                .preferredColorScheme(.light)
+
+            RenameSheet(title: "Rename Profile", currentName: "Alex", isPresented: .constant(true)) { _ in }
+                .previewDisplayName("Rename — Dark")
+                .preferredColorScheme(.dark)
         }
     }
 }

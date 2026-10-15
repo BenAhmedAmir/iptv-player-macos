@@ -26,6 +26,18 @@ final class SourcesViewModel: ObservableObject {
         sources = persistence.loadSources(profileID: profileID)
     }
 
+    /// Copies the provider's account facts onto the source.
+    ///
+    /// Captured on every authentication so the Sources screen can show when a
+    /// subscription lapses, rather than only finding out once it has.
+    private func applyAccountInfo(_ response: XtreamAuthResponse, to source: inout IPTVSource) {
+        guard let info = response.userInfo else { return }
+        source.expiresAt = info.expiryDate
+        source.accountStatus = info.status
+        source.maxConnections = info.maxConnectionCount
+        source.isTrialAccount = info.isTrial
+    }
+
     // MARK: - Add Xtream Source
 
     func addXtreamSource(
@@ -41,7 +53,7 @@ final class SourcesViewModel: ObservableObject {
 
         do {
             // Validate credentials
-            _ = try await xtreamService.authenticate(
+            let auth = try await xtreamService.authenticate(
                 serverURL: serverURL,
                 username: username,
                 password: password
@@ -54,6 +66,7 @@ final class SourcesViewModel: ObservableObject {
                 type: .xtreamCodes,
                 serverURL: serverURL
             )
+            applyAccountInfo(auth, to: &source)
 
             // Fetch categories and live streams
             let categories = try await xtreamService.getLiveCategories(
@@ -183,6 +196,145 @@ final class SourcesViewModel: ObservableObject {
 
     // MARK: - Refresh Source
 
+    /// Stores the optional guide URL supplied when a source was added.
+    ///
+    /// The add methods predate the field and return nothing, so the most recent
+    /// source is the one just appended.
+    func persistEPGURL(_ url: String, forMostRecentSource: Bool) {
+        guard forMostRecentSource,
+              !url.isEmpty,
+              let profileID,
+              var source = sources.last else {
+            return
+        }
+        source.epgURL = url
+        sources[sources.count - 1] = source
+        persistence.saveSources(sources, profileID: profileID)
+    }
+
+    // MARK: - Edit Source
+
+    /// Values an edit sheet can change. Credentials are optional: leaving them
+    /// blank keeps whatever is already in the Keychain.
+    struct SourceEdits {
+        var name: String
+        var serverURL: String
+        var username: String
+        var password: String
+        var playlistURL: String
+        var epgURL: String
+    }
+
+    /// Applies edits in place, keeping the source's id.
+    ///
+    /// The id must survive: favorites, watch history and playback positions all
+    /// key off it, so recreating the source would orphan them.
+    @discardableResult
+    func updateSource(_ source: IPTVSource, edits: SourceEdits) async -> Bool {
+        guard let profileID,
+              let index = sources.firstIndex(where: { $0.id == source.id }) else {
+            return false
+        }
+
+        loadingSourceID = source.id
+        defer { loadingSourceID = nil }
+
+        let trimmedName = edits.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newServer = edits.serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newPlaylist = edits.playlistURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newUsername = edits.username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            switch source.type {
+            case .xtreamCodes:
+                let existing = KeychainService.shared.getCredentials(sourceID: source.id)
+                let username = newUsername.isEmpty ? (existing?.username ?? "") : newUsername
+                let password = edits.password.isEmpty ? (existing?.password ?? "") : edits.password
+
+                guard !newServer.isEmpty, !username.isEmpty, !password.isEmpty else {
+                    throw IPTVError.invalidCredentials
+                }
+
+                // Verify before writing anything, so a bad edit cannot leave the
+                // source in a state that no longer works.
+                let auth = try await xtreamService.authenticate(
+                    serverURL: newServer, username: username, password: password
+                )
+
+                sources[index].serverURL = newServer
+                applyAccountInfo(auth, to: &sources[index])
+                try KeychainService.shared.storeCredentials(
+                    sourceID: source.id, username: username, password: password
+                )
+
+            case .m3uURL:
+                guard !newPlaylist.isEmpty else { throw IPTVError.invalidM3U("No URL") }
+                // Parsing is the only way to know a playlist URL is usable.
+                _ = try await m3uParser.parseRemoteURL(newPlaylist, sourceID: source.id)
+                sources[index].remoteURL = newPlaylist
+
+            case .m3uFile:
+                // The file itself is changed by re-picking it, handled by the
+                // caller; only the label and guide URL are editable here.
+                break
+            }
+
+            if !trimmedName.isEmpty { sources[index].name = trimmedName }
+            sources[index].epgURL = edits.epgURL.isEmpty ? nil : edits.epgURL
+            sources[index].updatedAt = Date()
+            persistence.saveSources(sources, profileID: profileID)
+
+            // Re-pull content so the change takes effect immediately.
+            await refreshSource(sources[index])
+            return true
+
+        } catch let iptvError as IPTVError {
+            self.error = iptvError
+            self.showError = true
+        } catch {
+            self.error = .unknown(error.localizedDescription)
+            self.showError = true
+        }
+        return false
+    }
+
+    /// Swaps the playlist file behind an M3U file source, keeping its id.
+    @discardableResult
+    func replacePlaylistFile(for source: IPTVSource, fileURL: URL) async -> Bool {
+        guard let profileID,
+              let index = sources.firstIndex(where: { $0.id == source.id }) else {
+            return false
+        }
+
+        loadingSourceID = source.id
+        defer { loadingSourceID = nil }
+
+        do {
+            let channels = try await m3uParser.parseLocalFileURL(fileURL, sourceID: source.id)
+            let bookmark = try? fileURL.bookmarkData(
+                options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil
+            )
+
+            sources[index].localFilePath = fileURL.path
+            sources[index].fileBookmark = bookmark
+            sources[index].channelCount = channels.count
+            sources[index].lastRefreshedAt = Date()
+            sources[index].updatedAt = Date()
+
+            persistence.saveCachedChannels(channels.map(CachedChannel.init), sourceID: source.id)
+            persistence.saveSources(sources, profileID: profileID)
+            return true
+
+        } catch let iptvError as IPTVError {
+            self.error = iptvError
+            self.showError = true
+        } catch {
+            self.error = .unknown(error.localizedDescription)
+            self.showError = true
+        }
+        return false
+    }
+
     // MARK: - Re-authenticate Xtream Source
 
     /// Replaces the stored credentials for an existing Xtream source.
@@ -207,11 +359,15 @@ final class SourcesViewModel: ObservableObject {
 
         do {
             // Verify before storing, so a typo cannot overwrite working credentials.
-            _ = try await xtreamService.authenticate(
+            let auth = try await xtreamService.authenticate(
                 serverURL: serverURL,
                 username: username,
                 password: password
             )
+            // A re-sign-in usually follows a renewal, so the new expiry matters.
+            if let index = sources.firstIndex(where: { $0.id == source.id }) {
+                applyAccountInfo(auth, to: &sources[index])
+            }
 
             try KeychainService.shared.storeCredentials(
                 sourceID: source.id,
@@ -247,6 +403,8 @@ final class SourcesViewModel: ObservableObject {
 
         do {
             var channels: [Channel] = []
+            /// Kept so the account facts land with the rest of the update.
+            var authResponse: XtreamAuthResponse?
 
             switch source.type {
             case .xtreamCodes:
@@ -254,6 +412,12 @@ final class SourcesViewModel: ObservableObject {
                       let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
                     throw IPTVError.invalidCredentials
                 }
+
+                // Checks account status explicitly: an expired account still
+                // answers the stream endpoints, just with nothing in them.
+                authResponse = try await xtreamService.authenticate(
+                    serverURL: serverURL, username: creds.username, password: creds.password
+                )
 
                 let categories = try await xtreamService.getLiveCategories(
                     serverURL: serverURL, username: creds.username, password: creds.password
@@ -306,6 +470,9 @@ final class SourcesViewModel: ObservableObject {
                 sources[index].channelCount = channels.count
                 sources[index].lastRefreshedAt = Date()
                 sources[index].updatedAt = Date()
+                if let authResponse {
+                    applyAccountInfo(authResponse, to: &sources[index])
+                }
                 persistence.saveSources(sources, profileID: profileID)
             }
 
@@ -324,7 +491,9 @@ final class SourcesViewModel: ObservableObject {
         guard let profileID = profileID else { return }
 
         KeychainService.shared.deleteCredentials(sourceID: source.id)
-        persistence.deleteCachedChannels(sourceID: source.id)
+        // Channels, movies, TV shows, categories, favorites, history and
+        // playback positions all go with it.
+        persistence.deleteAllData(sourceID: source.id, profileID: profileID)
         sources.removeAll { $0.id == source.id }
         persistence.saveSources(sources, profileID: profileID)
     }

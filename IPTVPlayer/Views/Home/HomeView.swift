@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Home View
 
-/// Home screen showing recently watched, favorites, and channel preview.
+/// Landing screen: greeting, Continue Watching, Favorites and Recently Added.
 struct HomeView: View {
     @Binding var selectedNav: NavigationItem?
     @EnvironmentObject var channelVM: ChannelViewModel
@@ -11,525 +11,392 @@ struct HomeView: View {
     @EnvironmentObject var profileVM: ProfileViewModel
     @EnvironmentObject var sourcesVM: SourcesViewModel
 
+    /// Read once per appearance rather than per render — it touches the disk.
+    @State private var resumable: [PlaybackPosition] = []
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                // Header & Greeting
-                headerSection
-
-                // Quick Action Cards / Channel Banner
-                if channelVM.totalChannelCount > 0 {
-                    channelsOverviewBanner
-                }
-
-                // Recently Watched
-                let recentChannels = channelVM.recentChannels()
-                if !recentChannels.isEmpty {
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionHeader(title: "Recently Watched", icon: "clock.fill")
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 12) {
-                                ForEach(recentChannels, id: \.compoundID) { channel in
-                                    ChannelCard(channel: channel, isFavorite: channelVM.isFavorite(channel)) {
-                                        channelVM.recordWatch(channel)
-                                        playerVM.playChannel(channel)
-                                    } onFavorite: {
-                                        channelVM.toggleFavorite(channel)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 1)
-                        }
-                    }
-                }
-
-                // Favorites
-                let favChannels = channelVM.favoriteChannels()
-                if !favChannels.isEmpty {
-                    VStack(alignment: .leading, spacing: 14) {
-                        SectionHeader(title: "Favorites", icon: "star.fill")
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 12) {
-                                ForEach(favChannels, id: \.compoundID) { channel in
-                                    ChannelCard(channel: channel, isFavorite: true) {
-                                        channelVM.recordWatch(channel)
-                                        playerVM.playChannel(channel)
-                                    } onFavorite: {
-                                        channelVM.toggleFavorite(channel)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 1)
-                        }
-                    }
-                }
-
-                // Channels Preview on Home
-                if !channelVM.allChannels.isEmpty {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            SectionHeader(title: "Live Channels", icon: "tv.fill")
-                            Spacer()
-                            Button {
-                                selectedNav = .liveTV
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text("View All (\(channelVM.totalChannelCount))")
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                }
-                                .font(.subheadline.weight(.medium))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.blue)
-                        }
-
-                        // Grid of first 18 channels
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)],
-                            spacing: 14
-                        ) {
-                            ForEach(Array(channelVM.allChannels.prefix(18)), id: \.compoundID) { channel in
-                                ChannelCard(channel: channel, isFavorite: channelVM.isFavorite(channel)) {
-                                    channelVM.recordWatch(channel)
-                                    playerVM.playChannel(channel)
-                                } onFavorite: {
-                                    channelVM.toggleFavorite(channel)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Movies Preview on Home
-                if !vodVM.filteredMovies.isEmpty {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            SectionHeader(title: "Featured Movies", icon: "film.stack.fill")
-                            Spacer()
-                            Button {
-                                selectedNav = .movies
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text("View All (\(vodVM.filteredMovies.count))")
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                }
-                                .font(.subheadline.weight(.medium))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.orange)
-                        }
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 14) {
-                                ForEach(Array(vodVM.filteredMovies.prefix(12)), id: \.compoundID) { movie in
-                                    MovieCard(movie: movie) {
-                                        playerVM.playMovie(movie)
-                                    }
-                                    .frame(width: 140)
-                                }
-                            }
-                            .padding(.horizontal, 1)
-                        }
-                    }
-                }
-
-                // TV Shows Preview on Home
-                if !vodVM.filteredSeries.isEmpty {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            SectionHeader(title: "Featured TV Shows", icon: "tv.inset.filled")
-                            Spacer()
-                            Button {
-                                selectedNav = .series
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text("View All (\(vodVM.filteredSeries.count))")
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                }
-                                .font(.subheadline.weight(.medium))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.purple)
-                        }
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: 14) {
-                                ForEach(Array(vodVM.filteredSeries.prefix(12)), id: \.compoundID) { item in
-                                    SeriesCard(series: item) {
-                                        vodVM.openSeriesDetails(item)
-                                    }
-                                    .frame(width: 140)
-                                }
-                            }
-                            .padding(.horizontal, 1)
-                        }
-                    }
-                } else if sourcesVM.sources.isEmpty {
-                    // Truly empty state (no sources configured)
-                    noSourcesState
-                } else {
-                    // Sources configured but channels not loaded yet
-                    loadingChannelsState
-                }
-
-                Spacer(minLength: 20)
+        Group {
+            if sourcesVM.sources.filter(\.isEnabled).isEmpty {
+                welcomeState
+            } else if isLoading {
+                loadingSkeleton
+            } else {
+                content
             }
-            .padding(24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Theme.surface)
+        .onAppear { resumable = playerVM.resumableItems(limit: 3) }
+        .onChange(of: playerVM.showPlayer) { isShowing in
+            // Refresh when the player closes, so progress is current.
+            if !isShowing { resumable = playerVM.resumableItems(limit: 3) }
+        }
     }
 
-    // MARK: - Header
+    // MARK: - Content
 
-    private var headerSection: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 4) {
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 30) {
                 Text(greeting)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                if let profile = profileVM.activeProfile {
-                    Text(profile.name)
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+                    .font(.system(size: 26, weight: .bold))
+                    .tracking(-0.5)
+                    .foregroundColor(Theme.textPrimary)
+
+                if !resumable.isEmpty {
+                    continueWatchingSection
+                }
+
+                if !favoriteChannels.isEmpty {
+                    favoritesSection
+                }
+
+                if !recentMovies.isEmpty {
+                    recentMoviesSection
+                }
+
+                if resumable.isEmpty && favoriteChannels.isEmpty && recentMovies.isEmpty {
+                    gettingStarted
                 }
             }
-
-            Spacer()
-
-            if channelVM.totalChannelCount > 0 {
-                Button {
-                    selectedNav = .liveTV
-                } label: {
-                    Label("Browse All Channels", systemImage: "play.tv.fill")
-                        .font(.headline)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-            }
+            .padding(.horizontal, 28)
+            .padding(.top, 26)
+            .padding(.bottom, 32)
         }
-        .padding(.top, 4)
-    }
-
-    // MARK: - Overview Banner
-
-    private var channelsOverviewBanner: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: 14)],
-            spacing: 14
-        ) {
-            // Live TV quick card
-            Button {
-                selectedNav = .liveTV
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "tv.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.blue)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.blue.opacity(0.12)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(channelVM.totalChannelCount) Channels")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        Text("Live TV")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundColor(.secondary)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-            }
-            .buttonStyle(.plain)
-
-            // Movies quick card
-            Button {
-                selectedNav = .movies
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "film.stack.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.orange)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.orange.opacity(0.12)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(vodVM.filteredMovies.count) Movies")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        Text("On Demand")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundColor(.secondary)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-            }
-            .buttonStyle(.plain)
-
-            // TV Shows quick card
-            Button {
-                selectedNav = .series
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "tv.inset.filled")
-                        .font(.system(size: 24))
-                        .foregroundColor(.purple)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.purple.opacity(0.12)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(vodVM.filteredSeries.count) TV Shows")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        Text("Series & Seasons")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundColor(.secondary)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-            }
-            .buttonStyle(.plain)
-
-            // Favorites quick card
-            Button {
-                selectedNav = .favorites
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.yellow)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.yellow.opacity(0.12)))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(channelVM.favorites.count) Favorites")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        Text("Saved Channels")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundColor(.secondary)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    // MARK: - Empty States
-
-    private var noSourcesState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "tv.inset.filled")
-                .font(.system(size: 56))
-                .foregroundStyle(.linearGradient(
-                    colors: [.blue, .purple],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-
-            VStack(spacing: 6) {
-                Text("Welcome to IPTV Player")
-                    .font(.title2.bold())
-
-                Text("Add an IPTV source to start browsing and watching channels.")
-                    .foregroundColor(.secondary)
-            }
-
-            Button {
-                sourcesVM.isShowingAddSource = true
-            } label: {
-                Label("Add Source", systemImage: "plus")
-                    .font(.headline)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
-    }
-
-    private var loadingChannelsState: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Loading channels from sources...")
-                .foregroundColor(.secondary)
-
-            Button("Refresh Sources") {
-                if let profile = profileVM.activeProfile {
-                    for source in sourcesVM.sources {
-                        Task { await sourcesVM.refreshSource(source) }
-                    }
-                    Task { await channelVM.loadChannels(profileID: profile.id, sources: sourcesVM.sources) }
-                }
-            }
-            .buttonStyle(.bordered)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
     }
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let part: String
         switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<22: return "Good evening"
-        default: return "Good night"
+        case 5..<12: part = "Good morning"
+        case 12..<18: part = "Good afternoon"
+        default: part = "Good evening"
+        }
+        guard let name = profileVM.activeProfile?.name else { return part }
+        return "\(part), \(name)"
+    }
+
+    // MARK: - Continue Watching
+
+    private var continueWatchingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeading(title: "Continue Watching")
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3),
+                spacing: 16
+            ) {
+                ForEach(resumable) { item in
+                    ContinueWatchingCard(position: item) {
+                        playerVM.resume(item)
+                    }
+                }
+            }
         }
     }
-}
 
-// MARK: - Section Header
+    // MARK: - Favorites
 
-struct SectionHeader: View {
-    let title: String
-    let icon: String
+    private var favoriteChannels: [Channel] {
+        Array(channelVM.favoriteChannels().prefix(8))
+    }
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundColor(.blue)
-            Text(title)
-                .font(.title3.bold())
+    private var favoritesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeading(title: "Favorites", actionTitle: "Show all") {
+                selectedNav = .favorites
+            }
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+                spacing: 12
+            ) {
+                ForEach(favoriteChannels, id: \.compoundID) { channel in
+                    ChannelTileCard(channel: channel) {
+                        channelVM.recordWatch(channel)
+                        playerVM.playChannel(channel)
+                    } onToggleFavorite: {
+                        channelVM.toggleFavorite(channel)
+                    }
+                }
+            }
         }
     }
-}
 
-// MARK: - Channel Card
+    // MARK: - Recently Added
 
-struct ChannelCard: View {
-    let channel: Channel
-    let isFavorite: Bool
-    let onPlay: () -> Void
-    let onFavorite: () -> Void
+    /// Newest by the provider's `added` timestamp, which is the only date
+    /// movies actually carry.
+    private var recentMovies: [Movie] {
+        vodVM.movies
+            .sorted { ($0.addedDate ?? .distantPast) > ($1.addedDate ?? .distantPast) }
+            .prefix(7)
+            .map { $0 }
+    }
 
-    @State private var isHovered = false
+    private var recentMoviesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeading(title: "Recently Added Movies", actionTitle: "Show all") {
+                selectedNav = .movies
+            }
 
-    var body: some View {
-        Button(action: onPlay) {
-            VStack(alignment: .leading, spacing: 8) {
-                // Logo area
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                        .frame(width: 140, height: 90)
-
-                    if let logoURL = channel.logoURL {
-                        CachedImageView(url: logoURL)
-                            .frame(width: 60, height: 60)
-                    } else {
-                        Image(systemName: "tv")
-                            .font(.system(size: 28))
-                            .foregroundColor(.secondary)
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 7),
+                spacing: 14
+            ) {
+                ForEach(recentMovies, id: \.compoundID) { movie in
+                    PosterCard(
+                        title: movie.name,
+                        meta: movieMeta(movie),
+                        artworkURL: movie.posterURL,
+                        progress: 0
+                    ) {
+                        playerVM.playMovie(movie)
                     }
+                }
+            }
+        }
+    }
 
-                    // Play overlay
-                    if isHovered {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.black.opacity(0.4))
-                            .frame(width: 140, height: 90)
+    private func movieMeta(_ movie: Movie) -> String {
+        var parts: [String] = []
+        if let year = movie.year { parts.append(String(year)) }
+        if let rating = movie.normalizedRating {
+            parts.append("★ \(String(format: "%.1f", rating))")
+        }
+        return parts.joined(separator: " · ")
+    }
 
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(.white)
-                    }
+    // MARK: - Empty States
 
-                    // Favorite badge
-                    if isFavorite {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Image(systemName: "star.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.yellow)
-                                    .padding(6)
-                            }
-                            Spacer()
+    private var welcomeState: some View {
+        VStack(spacing: 14) {
+            Text("Welcome to IPTV Player")
+                .font(.system(size: 26, weight: .bold))
+                .tracking(-0.5)
+                .foregroundColor(Theme.textPrimary)
+
+            Text("Add a playlist from your provider to see live channels, movies and TV shows. You can add an M3U link or Xtream Codes login.")
+                .font(.system(size: 14))
+                .foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+                .frame(maxWidth: 460)
+
+            Button("Add Your First Source") {
+                sourcesVM.isShowingAddSource = true
+            }
+            .buttonStyle(DesignPrimaryButtonStyle(horizontalPadding: 18, verticalPadding: 8))
+            .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var gettingStarted: some View {
+        EmptyStateView(
+            kind: .empty(
+                title: "Nothing to pick up yet",
+                message: "Browse Live TV, star a few channels, or start a movie — they will show up here."
+            ),
+            actionTitle: "Browse Live TV"
+        ) {
+            selectedNav = .liveTV
+        }
+        .frame(minHeight: 260)
+    }
+
+    private var isLoading: Bool {
+        channelVM.isLoading || (vodVM.isLoadingMovies && vodVM.movies.isEmpty)
+    }
+
+    /// Mirrors the real sections so the page keeps its shape while loading.
+    private var loadingSkeleton: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 30) {
+                SkeletonBlock(cornerRadius: 6)
+                    .frame(width: 260, height: 26)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonBlock(cornerRadius: 4).frame(width: 150, height: 14)
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3),
+                        spacing: 16
+                    ) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            SkeletonBlock(cornerRadius: Theme.Radius.card)
+                                .aspectRatio(16 / 9, contentMode: .fit)
                         }
                     }
                 }
 
-                // Channel name
-                Text(channel.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                    .frame(width: 140, alignment: .leading)
-
-                // Group
-                if let group = channel.group {
-                    Text(group)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .frame(width: 140, alignment: .leading)
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonBlock(cornerRadius: 4).frame(width: 110, height: 14)
+                    LazyVGrid(
+                        columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+                        spacing: 12
+                    ) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            SkeletonBlock(cornerRadius: Theme.Radius.card).frame(height: 64)
+                        }
+                    }
                 }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, 26)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Continue Watching Card
+
+/// 16:9 card with a watch-progress bar and a kind badge.
+struct ContinueWatchingCard: View {
+    let position: PlaybackPosition
+    let onPlay: () -> Void
+
+    var body: some View {
+        Button(action: onPlay) {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .bottom) {
+                    artwork
+                    WatchProgressBar(
+                        fraction: position.fractionComplete,
+                        height: 4,
+                        tint: Theme.textPrimary,
+                        trackColor: Color.white.opacity(0.2)
+                    )
+                }
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.card)
+                        .stroke(Theme.tileBorder, lineWidth: 1)
+                )
+                .overlay(alignment: .topLeading) {
+                    DesignBadge(
+                        text: position.isEpisode == true ? "EPISODE" : "MOVIE",
+                        background: Color.black.opacity(0.5)
+                    )
+                    .padding(10)
+                }
+
+                Text(position.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+
+                Text(remainingText)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .contextMenu {
-            Button {
-                onPlay()
-            } label: {
-                Label("Play", systemImage: "play.fill")
-            }
+    }
 
-            Button {
-                onFavorite()
-            } label: {
-                Label(isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                      systemImage: isFavorite ? "star.slash" : "star.fill")
-            }
+    @ViewBuilder
+    private var artwork: some View {
+        if let raw = position.artworkURL, let url = URL(string: raw) {
+            PosterImageView(url: url)
+        } else {
+            Rectangle().fill(IdentityColor.artwork(for: position.title))
         }
+    }
+
+    private var remainingText: String {
+        guard position.duration > 0 else {
+            return position.subtitle ?? ""
+        }
+        let remaining = Int((position.duration - position.seconds) / 60)
+        let suffix = remaining > 0 ? "\(remaining) min left" : "Almost finished"
+        guard let subtitle = position.subtitle, !subtitle.isEmpty else { return suffix }
+        return "\(subtitle) · \(suffix)"
+    }
+}
+
+// MARK: - Poster Card
+
+/// 2:3 poster with title and metadata, used by Home and the VOD grids.
+struct PosterCard: View {
+    let title: String
+    let meta: String
+    let artworkURL: URL?
+    var progress: Double = 0
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 7) {
+                ZStack(alignment: .bottom) {
+                    if let artworkURL {
+                        PosterImageView(url: artworkURL)
+                    } else {
+                        Rectangle()
+                            .fill(IdentityColor.artwork(for: title))
+                            .overlay(alignment: .bottomLeading) {
+                                Text(title)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(3)
+                                    .padding(10)
+                            }
+                    }
+
+                    if progress > 0 {
+                        WatchProgressBar(
+                            fraction: progress,
+                            height: 3,
+                            tint: Theme.textPrimary,
+                            trackColor: Color.white.opacity(0.25)
+                        )
+                    }
+                }
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.Radius.tile)
+                        .stroke(Theme.tileBorder, lineWidth: 1)
+                )
+
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Previews
+
+struct HomeView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            HomeView(selectedNav: .constant(.home))
+                .previewDisplayName("Home — Dark")
+                .preferredColorScheme(.dark)
+
+            HomeView(selectedNav: .constant(.home))
+                .previewDisplayName("Home — Light")
+                .preferredColorScheme(.light)
+        }
+        .environmentObject(ChannelViewModel())
+        .environmentObject(VODViewModel())
+        .environmentObject(PlayerViewModel())
+        .environmentObject(ProfileViewModel())
+        .environmentObject(SourcesViewModel())
+        .frame(width: 900, height: 620)
     }
 }

@@ -75,6 +75,8 @@ struct Episode: Identifiable, Hashable, Codable {
     let durationSecs: Int?
     let formattedDuration: String?
     let plot: String?
+    /// Episode still, when the provider supplies one.
+    var imageURL: URL?
 
     var compoundID: String {
         "\(sourceID.uuidString)_\(seriesID)_\(id)"
@@ -315,11 +317,14 @@ struct XtreamEpisodeInfo: Codable {
     let durationSecs: Int?
     let duration: String?
     let plot: String?
+    /// Per-episode still. Most panels send it; some omit it entirely.
+    let movieImage: String?
 
     enum CodingKeys: String, CodingKey {
         case durationSecs = "duration_secs"
         case duration
         case plot
+        case movieImage = "movie_image"
     }
 
     init(from decoder: Decoder) throws {
@@ -327,6 +332,7 @@ struct XtreamEpisodeInfo: Codable {
         durationSecs = (try? container.decode(VODFlexibleInt.self, forKey: .durationSecs))?.value
         duration = (try? container.decode(VODFlexibleString.self, forKey: .duration))?.value
         plot = try? container.decode(String.self, forKey: .plot)
+        movieImage = (try? container.decode(VODFlexibleString.self, forKey: .movieImage))?.value
     }
 }
 

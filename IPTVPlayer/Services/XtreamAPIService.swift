@@ -435,7 +435,8 @@ final class XtreamAPIService {
                     containerExtension: ext,
                     durationSecs: ep.info?.durationSecs,
                     formattedDuration: ep.info?.duration,
-                    plot: ep.info?.plot
+                    plot: ep.info?.plot,
+                    imageURL: ep.info?.movieImage.flatMap { URL(string: $0) }
                 )
                 result.append(episode)
             }

@@ -70,6 +70,9 @@ struct TestRunnerApp {
         runPersistenceTests()
         runMovieAndSeriesTests()
         runCatalogueFilterTests()
+        runTitleCleanerTests()
+        runAccountExpiryTests()
+        runSourceDeletionTests()
         runErrorTests()
 
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
@@ -799,6 +802,172 @@ struct TestRunnerApp {
         assertEqual(show.genreList, ["Action & Adventure", "Drama", "Crime"], "genres split and trimmed, blanks dropped")
         assertEqual(show.year, 2011, "series year from release range")
         assertEqual(show.normalizedRating, 9.0, "series rating normalized")
+    }
+
+
+    // MARK: - Title Cleaning
+
+    static func runTitleCleanerTests() {
+        print("▶ Running TitleCleanerTests...")
+
+        // Series: language prefix becomes a badge, year ranges disappear.
+        let dark = TitleCleaner.series("DE | Dark (2017-2020)")
+        assertEqual(dark.badge, "DE", "language prefix lifted to badge")
+        assertEqual(dark.title, "Dark", "year range stripped")
+
+        let lupin = TitleCleaner.series("FR - Lupin (2021)")
+        assertEqual(lupin.badge, "FR", "dash-separated prefix")
+        assertEqual(lupin.title, "Lupin", "single year stripped")
+
+        let trailing = TitleCleaner.series("Breaking Bad (EN)")
+        assertEqual(trailing.badge, "EN", "trailing tag lifted to badge")
+        assertEqual(trailing.title, "Breaking Bad", "trailing tag removed")
+
+        let plain = TitleCleaner.series("The Undertow")
+        assertNil(plain.badge, "no badge when there is no tag")
+        assertEqual(plain.title, "The Undertow", "plain title untouched")
+
+        // A genuine word must not be mistaken for a language tag.
+        let documentary = TitleCleaner.series("Documentary - The Deep")
+        assertNil(documentary.badge, "long prefix is not a namespace")
+
+        // Episodes: SxxExx markers in every shape the regex covers.
+        assertEqual(
+            TitleCleaner.episode("Dark S01E03 The Crossing", seriesName: "Dark", number: 3),
+            "The Crossing", "S01E03 marker and series name removed"
+        )
+        assertEqual(
+            TitleCleaner.episode("Dark S01.E02", seriesName: "Dark", number: 2),
+            "Episode 2", "nothing left but the marker falls back"
+        )
+        assertEqual(
+            TitleCleaner.episode("s1 - e12 Fault Lines", seriesName: "Dark", number: 12),
+            "Fault Lines", "spaced and dashed marker"
+        )
+        assertEqual(
+            TitleCleaner.episode(nil, seriesName: "Dark", number: 7),
+            "Episode 7", "missing title falls back"
+        )
+        assertEqual(
+            TitleCleaner.episode("  ", seriesName: "Dark", number: 4),
+            "Episode 4", "blank title falls back"
+        )
+        assertEqual(
+            TitleCleaner.episode("5", seriesName: "Dark", number: 5),
+            "Episode 5", "bare number is not a title"
+        )
+        assertEqual(
+            TitleCleaner.episode("Open Water", seriesName: "Dark", number: 4),
+            "Open Water", "real titles survive untouched"
+        )
+
+        // Duration formatting.
+        assertEqual(TitleCleaner.duration(seconds: 4860, fallback: nil), "1h 21m", "over an hour")
+        assertEqual(TitleCleaner.duration(seconds: 2820, fallback: nil), "47m", "under an hour")
+        assertEqual(TitleCleaner.duration(seconds: nil, fallback: "45"), "45", "falls back to provider string")
+        assertEqual(TitleCleaner.duration(seconds: 0, fallback: nil), "", "zero yields nothing")
+    }
+
+
+    // MARK: - Account Expiry
+
+    static func runAccountExpiryTests() {
+        print("▶ Running AccountExpiryTests...")
+
+        func info(expDate: String?) throws -> XtreamAccountInfo {
+            let exp = expDate.map { "\"\($0)\"" } ?? "null"
+            let json = "{\"status\":\"Active\",\"exp_date\":\(exp),\"max_connections\":\"2\"}"
+            return try JSONDecoder().decode(XtreamAccountInfo.self, from: Data(json.utf8))
+        }
+
+        // exp_date arrives as a Unix timestamp string.
+        let future = Date().addingTimeInterval(60 * 60 * 24 * 30)
+        let decoded = try? info(expDate: String(Int(future.timeIntervalSince1970)))
+        assertNotNil(decoded?.expiryDate, "timestamp parsed into a date")
+        assertFalse(decoded?.isExpired ?? true, "future expiry is not expired")
+
+        let past = Date().addingTimeInterval(-60 * 60 * 24)
+        let lapsed = try? info(expDate: String(Int(past.timeIntervalSince1970)))
+        assertTrue(lapsed?.isExpired ?? false, "past expiry is expired")
+
+        // Lifetime accounts send nothing, or a zero — neither is a real date.
+        let lifetime = try? info(expDate: nil)
+        assertNil(lifetime?.expiryDate, "absent exp_date yields no date")
+        assertFalse(lifetime?.isExpired ?? true, "no expiry is not 'expired'")
+
+        let zero = try? info(expDate: "0")
+        assertNil(zero?.expiryDate, "zero timestamp is not a date")
+        assertFalse(zero?.isExpired ?? true, "zero timestamp is not expired")
+
+        let garbage = try? info(expDate: "not-a-number")
+        assertNil(garbage?.expiryDate, "unparseable exp_date yields no date")
+
+        assertEqual(decoded?.maxConnectionCount, 2, "max_connections parsed")
+    }
+
+
+    // MARK: - Source Deletion
+
+    static func runSourceDeletionTests() {
+        print("▶ Running SourceDeletionTests...")
+
+        let persistence = PersistenceController.shared
+        let profileID = UUID()
+        let doomed = UUID()
+        let keeper = UUID()
+
+        func channel(_ sourceID: UUID, _ name: String) -> CachedChannel {
+            CachedChannel(from: Channel(
+                id: "ch1",
+                sourceID: sourceID,
+                name: name,
+                streamURL: URL(string: "http://example.com/live/1.ts")!,
+                logoURL: nil,
+                group: nil,
+                tvgID: nil,
+                language: nil,
+                country: nil
+            ))
+        }
+
+        // Caches for two sources, so deletion must be surgical rather than broad.
+        persistence.saveCachedChannels([channel(doomed, "Doomed")], sourceID: doomed)
+        persistence.saveCachedChannels([channel(keeper, "Keeper")], sourceID: keeper)
+        persistence.saveVODCategories(
+            [XtreamCategory(categoryID: "1", categoryName: "Action", parentID: 0)],
+            sourceID: doomed
+        )
+        persistence.saveSeriesCategories(
+            [XtreamCategory(categoryID: "2", categoryName: "Drama", parentID: 0)],
+            sourceID: doomed
+        )
+
+        let favorites = [
+            Favorite(profileID: profileID, sourceID: doomed, channelID: "a", channelName: "Doomed"),
+            Favorite(profileID: profileID, sourceID: keeper, channelID: "b", channelName: "Keeper")
+        ]
+        persistence.saveFavorites(favorites, profileID: profileID)
+
+        assertNotNil(persistence.loadCachedChannels(sourceID: doomed), "doomed cache written")
+        assertEqual(persistence.loadFavorites(profileID: profileID).count, 2, "both favorites written")
+
+        persistence.deleteAllData(sourceID: doomed, profileID: profileID)
+
+        // Everything belonging to the deleted source is gone...
+        assertNil(persistence.loadCachedChannels(sourceID: doomed), "channel cache removed")
+        assertNil(persistence.loadVODCategories(sourceID: doomed), "VOD categories removed")
+        assertNil(persistence.loadSeriesCategories(sourceID: doomed), "series categories removed")
+
+        let remainingFavorites = persistence.loadFavorites(profileID: profileID)
+        assertEqual(remainingFavorites.count, 1, "only the doomed favorite is dropped")
+        assertEqual(remainingFavorites.first?.sourceID, keeper, "the other source's favorite survives")
+
+        // ...and the untouched source is intact.
+        assertNotNil(persistence.loadCachedChannels(sourceID: keeper), "other source's cache survives")
+
+        // Clean up so the test leaves nothing behind.
+        persistence.deleteAllData(sourceID: keeper, profileID: profileID)
+        persistence.deleteProfileData(profileID: profileID)
     }
 
     static func runErrorTests() {

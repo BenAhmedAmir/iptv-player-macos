@@ -38,11 +38,11 @@ final class ProfileViewModel: ObservableObject {
 
     // MARK: - Create
 
-    func createProfile(name: String) {
+    func createProfile(name: String, avatarColorID: String? = nil, isKids: Bool = false) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let profile = Profile(name: trimmed)
+        let profile = Profile(name: trimmed, avatarColorID: avatarColorID, isKids: isKids)
         profiles.append(profile)
         persistence.saveProfiles(profiles)
 
@@ -94,6 +94,13 @@ final class ProfileViewModel: ObservableObject {
         if profiles.isEmpty {
             isShowingProfilePicker = true
         }
+    }
+
+    /// Number of sources configured for a profile, shown under its avatar on the
+    /// picker. Read straight from disk because profiles other than the active
+    /// one have nothing loaded in memory.
+    func sourceCount(for profile: Profile) -> Int {
+        persistence.loadSources(profileID: profile.id).count
     }
 
     // MARK: - Select

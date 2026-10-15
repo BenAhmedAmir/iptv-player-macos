@@ -28,106 +28,233 @@ final class VODViewModel: ObservableObject {
     @Published var hasLoadedSeries: Bool = false
 
     // MARK: - Selected Series Details State
-    // MARK: - Catalogue Filters
+    // MARK: - Catalogue Browsing
 
-    /// Sort orders for the movie grid. Recency uses the provider's `added`
-    /// timestamp, which is the only reliable date movies carry.
-    enum MovieSortOrder: String, CaseIterable, Identifiable {
-        case recentlyAdded, highestRated, newest, nameAscending
+    @Published private(set) var moviePreferences = CataloguePreferences.default
+    @Published private(set) var seriesPreferences = CataloguePreferences.default
 
-        var id: String { rawValue }
+    /// Item tallies per category id, filled in as categories load.
+    @Published private(set) var movieCategoryCounts: [String: Int] = [:]
+    @Published private(set) var seriesCategoryCounts: [String: Int] = [:]
 
-        var label: String {
-            switch self {
-            case .recentlyAdded: return "Recently Added"
-            case .highestRated: return "Highest Rated"
-            case .newest: return "Newest First"
-            case .nameAscending: return "Name (A–Z)"
-            }
-        }
+    private var profileID: UUID?
+    private var watchState = CatalogueFiltering.WatchState.empty
+    private var movieFilterTask: Task<Void, Never>?
+    private var seriesFilterTask: Task<Void, Never>?
 
-        func sort(_ items: [Movie]) -> [Movie] {
-            switch self {
-            case .recentlyAdded:
-                return items.sorted { ($0.addedDate ?? .distantPast) > ($1.addedDate ?? .distantPast) }
-            case .highestRated:
-                return items.sorted { ($0.normalizedRating ?? -1) > ($1.normalizedRating ?? -1) }
-            case .newest:
-                return items.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
-            case .nameAscending:
-                return items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            }
-        }
-    }
-
-    enum SeriesSortOrder: String, CaseIterable, Identifiable {
-        case highestRated, newest, nameAscending
-
-        var id: String { rawValue }
-
-        var label: String {
-            switch self {
-            case .highestRated: return "Highest Rated"
-            case .newest: return "Newest First"
-            case .nameAscending: return "Name (A–Z)"
-            }
-        }
-
-        func sort(_ items: [Series]) -> [Series] {
-            switch self {
-            case .highestRated:
-                return items.sorted { ($0.normalizedRating ?? -1) > ($1.normalizedRating ?? -1) }
-            case .newest:
-                return items.sorted { ($0.year ?? Int.min) > ($1.year ?? Int.min) }
-            case .nameAscending:
-                return items.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            }
-        }
-    }
-
-    @Published var movieMinimumRating: Double? { didSet { applyMovieFiltersIfChanged(oldValue, movieMinimumRating) } }
-    @Published var movieMinimumYear: Int? { didSet { applyMovieFiltersIfChanged(oldValue, movieMinimumYear) } }
-    @Published var movieSortOrder: MovieSortOrder = .recentlyAdded { didSet { applyMovieFiltersIfChanged(oldValue, movieSortOrder) } }
-
-    @Published var seriesMinimumRating: Double? { didSet { applySeriesFiltersIfChanged(oldValue, seriesMinimumRating) } }
-    @Published var seriesMinimumYear: Int? { didSet { applySeriesFiltersIfChanged(oldValue, seriesMinimumYear) } }
-    @Published var selectedGenre: String? { didSet { applySeriesFiltersIfChanged(oldValue, selectedGenre) } }
-    @Published var seriesSortOrder: SeriesSortOrder = .highestRated { didSet { applySeriesFiltersIfChanged(oldValue, seriesSortOrder) } }
-
-    /// Filtering runs from didSet, not a Combine sink on the published value: a
-    /// @Published publisher fires in willSet, so a sink would re-filter while
-    /// the property still held its previous value.
-    private func applyMovieFiltersIfChanged<T: Equatable>(_ old: T, _ new: T) {
-        guard old != new else { return }
-        displayedMovieLimit = 80
+    /// Loads the per-profile, per-tab browsing state. Called when the profile
+    /// becomes active; without it nothing is persisted.
+    func loadPreferences(profileID: UUID) {
+        self.profileID = profileID
+        moviePreferences = persistence.loadCataloguePreferences(profileID: profileID, tab: .movies)
+        seriesPreferences = persistence.loadCataloguePreferences(profileID: profileID, tab: .series)
+        watchState = CatalogueFiltering.WatchState.make(
+            from: persistence.loadPlaybackPositions(profileID: profileID)
+        )
         applyMovieFilters()
-    }
-
-    private func applySeriesFiltersIfChanged<T: Equatable>(_ old: T, _ new: T) {
-        guard old != new else { return }
-        displayedSeriesLimit = 80
         applySeriesFilters()
     }
 
-    var movieFiltersActive: Bool {
-        movieMinimumRating != nil || movieMinimumYear != nil || movieSortOrder != .recentlyAdded
+    /// Last failure per tab. Surfaced as a banner rather than thrown away, so a
+    /// dead provider is visible instead of looking like an empty catalogue.
+    @Published var movieError: IPTVError?
+    @Published var seriesError: IPTVError?
+
+    func error(for tab: CatalogueTab) -> IPTVError? {
+        tab == .movies ? movieError : seriesError
     }
 
-    var seriesFiltersActive: Bool {
-        seriesMinimumRating != nil || seriesMinimumYear != nil || selectedGenre != nil || seriesSortOrder != .highestRated
+    func clearError(for tab: CatalogueTab) {
+        if tab == .movies { movieError = nil } else { seriesError = nil }
     }
 
-    func resetMovieFilters() {
-        movieMinimumRating = nil
-        movieMinimumYear = nil
-        movieSortOrder = .recentlyAdded
+    private func report(_ error: Error, for tab: CatalogueTab) {
+        let mapped = (error as? IPTVError) ?? .unknown(error.localizedDescription)
+        if tab == .movies { movieError = mapped } else { seriesError = mapped }
     }
 
-    func resetSeriesFilters() {
-        seriesMinimumRating = nil
-        seriesMinimumYear = nil
-        selectedGenre = nil
-        seriesSortOrder = .highestRated
+    @Published private(set) var isRefreshingMovies = false
+    @Published private(set) var isRefreshingSeries = false
+
+    func isRefreshing(_ tab: CatalogueTab) -> Bool {
+        tab == .movies ? isRefreshingMovies : isRefreshingSeries
+    }
+
+    /// Re-pulls categories and the whole catalogue from the provider.
+    ///
+    /// Bypasses both caches on purpose: the in-memory one would return the same
+    /// titles, and the disk one is what the viewer is trying to get past.
+    func refreshCatalogue(_ tab: CatalogueTab) async {
+        guard let source = sources.first,
+              let serverURL = source.serverURL,
+              let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
+            // No usable source or no Keychain entry — say so rather than
+            // returning to an empty screen with no explanation.
+            if !sources.isEmpty { report(IPTVError.invalidCredentials, for: tab) }
+            return
+        }
+
+        // Validate the account first. An expired or suspended Xtream account
+        // commonly answers the catalogue endpoints with HTTP 200 and "{}",
+        // which would otherwise read as a legitimately empty catalogue.
+        do {
+            _ = try await xtreamService.authenticate(
+                serverURL: serverURL, username: creds.username, password: creds.password
+            )
+        } catch {
+            report(error, for: tab)
+            return
+        }
+
+        if tab == .movies {
+            guard !isRefreshingMovies else { return }
+            isRefreshingMovies = true
+            defer { isRefreshingMovies = false }
+
+            do {
+                let cats = try await xtreamService.getVODCategories(
+                    serverURL: serverURL, username: creds.username, password: creds.password
+                )
+                movieCategories = hidesRestrictedContent
+                    ? cats.filter { !ContentRestriction.isRestricted(category: $0.categoryName) }
+                    : cats
+                persistence.saveVODCategories(cats, sourceID: source.id)
+            } catch {
+                // Report and stop: fetching titles against a server that just
+                // refused the category call would only fail again.
+                report(error, for: .movies)
+                return
+            }
+
+            moviesByCategory.removeAll()
+            await selectMovieCategory(nil)
+        } else {
+            guard !isRefreshingSeries else { return }
+            isRefreshingSeries = true
+            defer { isRefreshingSeries = false }
+
+            do {
+                let cats = try await xtreamService.getSeriesCategories(
+                    serverURL: serverURL, username: creds.username, password: creds.password
+                )
+                seriesCategories = hidesRestrictedContent
+                    ? cats.filter { !ContentRestriction.isRestricted(category: $0.categoryName) }
+                    : cats
+                persistence.saveSeriesCategories(cats, sourceID: source.id)
+            } catch {
+                report(error, for: .series)
+                return
+            }
+
+            seriesByCategory.removeAll()
+            await selectSeriesCategory(nil)
+        }
+
+        // A provider that answers but returns nothing leaves an empty screen;
+        // name it rather than letting it look like a successful refresh.
+        let isEmpty = tab == .movies ? movies.isEmpty : series.isEmpty
+        if isEmpty, error(for: tab) == nil {
+            report(IPTVError.emptyChannelList, for: tab)
+        }
+
+        update(tab) { $0.lastRefreshedAt = Date() }
+    }
+
+    /// How many titles in this tab have a resumable position.
+    func continueWatchingCount(in tab: CatalogueTab) -> Int {
+        let keys = watchState.inProgressKeys
+        guard !keys.isEmpty else { return 0 }
+        return tab == .movies
+            ? movies.reduce(into: 0) { $0 += keys.contains($1.catalogueKey) ? 1 : 0 }
+            : series.reduce(into: 0) { $0 += keys.contains($1.catalogueKey) ? 1 : 0 }
+    }
+
+    /// Recomputes sidebar tallies from whatever is loaded. Counts are only as
+    /// complete as the catalogue in memory — selecting "All" loads everything
+    /// and fills them in.
+    func refreshCategoryCounts(for tab: CatalogueTab) {
+        if tab == .movies {
+            movieCategoryCounts = CatalogueFiltering.counts(for: movies)
+        } else {
+            seriesCategoryCounts = CatalogueFiltering.counts(for: series)
+        }
+    }
+
+    private func persist(_ tab: CatalogueTab) {
+        guard let profileID else { return }
+        let preferences = tab == .movies ? moviePreferences : seriesPreferences
+        persistence.saveCataloguePreferences(preferences, profileID: profileID, tab: tab)
+    }
+
+    // MARK: Mutations
+
+    func select(_ selection: CategorySelection, in tab: CatalogueTab) {
+        update(tab) { $0.selection = selection }
+    }
+
+    func togglePin(categoryID: String, in tab: CatalogueTab) {
+        update(tab) { preferences in
+            if let index = preferences.pinnedCategoryIDs.firstIndex(of: categoryID) {
+                preferences.pinnedCategoryIDs.remove(at: index)
+            } else {
+                preferences.pinnedCategoryIDs.append(categoryID)
+            }
+        }
+    }
+
+    func isPinned(categoryID: String, in tab: CatalogueTab) -> Bool {
+        preferences(for: tab).pinnedCategoryIDs.contains(categoryID)
+    }
+
+    func toggleGroup(_ group: String, in tab: CatalogueTab) {
+        update(tab) { preferences in
+            if let index = preferences.expandedGroups.firstIndex(of: group) {
+                preferences.expandedGroups.remove(at: index)
+            } else {
+                preferences.expandedGroups.append(group)
+            }
+        }
+    }
+
+    func isGroupExpanded(_ group: String, in tab: CatalogueTab) -> Bool {
+        preferences(for: tab).expandedGroups.contains(group)
+    }
+
+    /// Expands the locale's group the first time a catalogue is seen, so the
+    /// sidebar is not a wall of collapsed headers.
+    func seedExpandedGroupIfNeeded(groups: [String], in tab: CatalogueTab) {
+        guard preferences(for: tab).expandedGroups.isEmpty,
+              let preferred = CategoryNaming.defaultExpandedGroup(from: groups) else {
+            return
+        }
+        update(tab) { $0.expandedGroups = [preferred] }
+    }
+
+    func setFilters(_ filters: CatalogueFilters, in tab: CatalogueTab) {
+        update(tab) { $0.filters = filters }
+    }
+
+    func resetFilters(in tab: CatalogueTab) {
+        update(tab) { $0.filters = .none }
+    }
+
+    func setSort(_ sort: CatalogueSort, in tab: CatalogueTab) {
+        update(tab) { $0.filters.sort = sort }
+    }
+
+    func preferences(for tab: CatalogueTab) -> CataloguePreferences {
+        tab == .movies ? moviePreferences : seriesPreferences
+    }
+
+    private func update(_ tab: CatalogueTab, _ mutate: (inout CataloguePreferences) -> Void) {
+        if tab == .movies {
+            mutate(&moviePreferences)
+            applyMovieFilters()
+        } else {
+            mutate(&seriesPreferences)
+            applySeriesFilters()
+        }
+        persist(tab)
     }
 
     @Published var selectedSeries: Series?
@@ -143,6 +270,9 @@ final class VODViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     // In-memory cache for fast category switching
+    /// Kids profiles never see adult categories.
+    var hidesRestrictedContent = false
+
     private var moviesByCategory: [String: [Movie]] = [:]
     private var seriesByCategory: [String: [Series]] = [:]
 
@@ -195,6 +325,9 @@ final class VODViewModel: ObservableObject {
         guard let source = sources.first,
               let serverURL = source.serverURL,
               let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
+            // No usable source or no Keychain entry — say so rather than
+            // returning to an empty screen with no explanation.
+            if !sources.isEmpty { report(IPTVError.invalidCredentials, for: .movies) }
             return
         }
 
@@ -216,15 +349,19 @@ final class VODViewModel: ObservableObject {
                 username: creds.username,
                 password: creds.password
             )
-            self.movieCategories = cats
+            self.movieCategories = hidesRestrictedContent
+                ? cats.filter { !ContentRestriction.isRestricted(category: $0.categoryName) }
+                : cats
             self.persistence.saveVODCategories(cats, sourceID: source.id)
 
-            // If movies haven't been loaded yet, load the first category or top movies
-            if movies.isEmpty {
-                await selectMovieCategory(cats.first)
-            }
+            // Always load the entire catalogue. The sidebar filters in memory,
+            // so a partial set silently empties every category — and the cache
+            // cannot be trusted to be complete (older builds wrote one category
+            // into it). Cached titles already painted above, so this refreshes
+            // rather than blocks.
+            await selectMovieCategory(nil)
         } catch {
-            print("Failed to fetch VOD categories: \(error.localizedDescription)")
+            report(error, for: .movies)
         }
     }
 
@@ -235,6 +372,9 @@ final class VODViewModel: ObservableObject {
         guard let source = sources.first,
               let serverURL = source.serverURL,
               let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
+            // No usable source or no Keychain entry — say so rather than
+            // returning to an empty screen with no explanation.
+            if !sources.isEmpty { report(IPTVError.invalidCredentials, for: .movies) }
             return
         }
 
@@ -267,17 +407,20 @@ final class VODViewModel: ObservableObject {
                 sourceID: source.id
             )
 
+            self.movieError = nil
             self.moviesByCategory[catID] = converted
             self.movies = converted
             self.hasLoadedMovies = true
             self.applyMovieFilters()
 
-            // Save cache if this is the all or main category
-            if catID.isEmpty || category?.categoryID == movieCategories.first?.categoryID {
+            // Only ever cache the *whole* catalogue. Writing one category over
+            // it leaves a partial file that looks complete on next launch, so
+            // "All" shows a handful of titles and every other category is empty.
+            if catID.isEmpty {
                 self.persistence.saveCachedMovies(converted, sourceID: source.id)
             }
         } catch {
-            print("Failed to fetch VOD streams: \(error.localizedDescription)")
+            report(error, for: .movies)
         }
     }
 
@@ -287,34 +430,41 @@ final class VODViewModel: ObservableObject {
         }
     }
 
-    private func applyMovieFilters() {
-        var result = movies
+    /// Debounced and off the main actor: a provider category can hold thousands
+    /// of titles, and the sidebar plus grid must stay responsive while typing.
+    func applyMovieFilters() {
+        refreshCategoryCounts(for: .movies)
+        let items = movies
+        let selection = moviePreferences.selection
+        let search = movieSearchText
+        let filters = moviePreferences.filters
+        let watch = watchState
 
-        if !movieSearchText.isEmpty {
-            let query = movieSearchText.lowercased()
-            result = result.filter { $0.name.lowercased().contains(query) }
+        movieFilterTask?.cancel()
+        movieFilterTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+
+            let result = await Task.detached(priority: .userInitiated) {
+                CatalogueFiltering.apply(
+                    to: items, selection: selection, search: search,
+                    filters: filters, watch: watch
+                )
+            }.value
+
+            guard !Task.isCancelled else { return }
+            self?.filteredMovies = result
         }
-
-        if let minimum = movieMinimumRating {
-            // Unrated titles are excluded rather than treated as zero: ~13% of
-            // this catalogue reports no rating, and they are not all bad films.
-            result = result.filter { ($0.normalizedRating ?? -1) >= minimum }
-        }
-
-        if let minimum = movieMinimumYear {
-            result = result.filter { ($0.year ?? Int.min) >= minimum }
-        }
-
-        result = movieSortOrder.sort(result)
-        filteredMovies = result
     }
 
-    // MARK: - Series Logic
 
     func loadSeriesCategoriesAndInitialContent() async {
         guard let source = sources.first,
               let serverURL = source.serverURL,
               let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
+            // No usable source or no Keychain entry — say so rather than
+            // returning to an empty screen with no explanation.
+            if !sources.isEmpty { report(IPTVError.invalidCredentials, for: .series) }
             return
         }
 
@@ -334,14 +484,15 @@ final class VODViewModel: ObservableObject {
                 username: creds.username,
                 password: creds.password
             )
-            self.seriesCategories = cats
+            self.seriesCategories = hidesRestrictedContent
+                ? cats.filter { !ContentRestriction.isRestricted(category: $0.categoryName) }
+                : cats
             self.persistence.saveSeriesCategories(cats, sourceID: source.id)
 
-            if series.isEmpty {
-                await selectSeriesCategory(cats.first)
-            }
+            // Same as movies: always fetch the whole catalogue, then filter in memory.
+            await selectSeriesCategory(nil)
         } catch {
-            print("Failed to fetch Series categories: \(error.localizedDescription)")
+            report(error, for: .series)
         }
     }
 
@@ -352,6 +503,9 @@ final class VODViewModel: ObservableObject {
         guard let source = sources.first,
               let serverURL = source.serverURL,
               let creds = KeychainService.shared.getCredentials(sourceID: source.id) else {
+            // No usable source or no Keychain entry — say so rather than
+            // returning to an empty screen with no explanation.
+            if !sources.isEmpty { report(IPTVError.invalidCredentials, for: .series) }
             return
         }
 
@@ -384,16 +538,18 @@ final class VODViewModel: ObservableObject {
                 sourceID: source.id
             )
 
+            self.seriesError = nil
             self.seriesByCategory[catID] = converted
             self.series = converted
             self.hasLoadedSeries = true
             self.applySeriesFilters()
 
-            if catID.isEmpty || category?.categoryID == seriesCategories.first?.categoryID {
+            // Same as movies: only the complete catalogue is cacheable.
+            if catID.isEmpty {
                 self.persistence.saveCachedSeries(converted, sourceID: source.id)
             }
         } catch {
-            print("Failed to fetch series items: \(error.localizedDescription)")
+            report(error, for: .series)
         }
     }
 
@@ -403,28 +559,29 @@ final class VODViewModel: ObservableObject {
         }
     }
 
-    private func applySeriesFilters() {
-        var result = series
+    func applySeriesFilters() {
+        refreshCategoryCounts(for: .series)
+        let items = series
+        let selection = seriesPreferences.selection
+        let search = seriesSearchText
+        let filters = seriesPreferences.filters
+        let watch = watchState
 
-        if !seriesSearchText.isEmpty {
-            let query = seriesSearchText.lowercased()
-            result = result.filter { $0.name.lowercased().contains(query) }
+        seriesFilterTask?.cancel()
+        seriesFilterTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+
+            let result = await Task.detached(priority: .userInitiated) {
+                CatalogueFiltering.apply(
+                    to: items, selection: selection, search: search,
+                    filters: filters, watch: watch
+                )
+            }.value
+
+            guard !Task.isCancelled else { return }
+            self?.filteredSeries = result
         }
-
-        if let minimum = seriesMinimumRating {
-            result = result.filter { ($0.normalizedRating ?? -1) >= minimum }
-        }
-
-        if let minimum = seriesMinimumYear {
-            result = result.filter { ($0.year ?? Int.min) >= minimum }
-        }
-
-        if let genre = selectedGenre {
-            result = result.filter { $0.genreList.contains(genre) }
-        }
-
-        result = seriesSortOrder.sort(result)
-        filteredSeries = result
     }
 
     /// Genres present in the loaded series, for the filter menu. The provider

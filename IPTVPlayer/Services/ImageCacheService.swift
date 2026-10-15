@@ -70,6 +70,23 @@ final class ImageCacheService: ObservableObject {
         return image
     }
 
+    /// Bytes currently held on disk by the image cache.
+    ///
+    /// Walked on demand rather than tracked incrementally — Settings is the only
+    /// caller and an occasional directory scan is cheaper than bookkeeping on
+    /// every write.
+    func diskCacheSize() -> Int64 {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: diskCacheDirectory,
+            includingPropertiesForKeys: [.fileSizeKey]
+        ) else { return 0 }
+
+        return entries.reduce(into: Int64(0)) { total, url in
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            total += Int64(size)
+        }
+    }
+
     /// Clears the entire cache.
     func clearCache() {
         memoryCache.removeAllObjects()

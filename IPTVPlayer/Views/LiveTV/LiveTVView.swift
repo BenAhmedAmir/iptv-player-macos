@@ -2,437 +2,334 @@ import SwiftUI
 
 // MARK: - Live TV View
 
-/// Browsable channel list with search, category filter, and source filter.
+/// Three-column channel browser: categories, channel list, and a detail panel
+/// for the highlighted channel.
+///
+/// The design also specifies a second "Guide" layout — a full EPG grid with a
+/// now-line and programme cells. That is not built here because the app has no
+/// programme data: EPG was explicitly out of scope for the MVP and `Channel`
+/// carries no schedule. Everything the Guide needs (now/next titles, airtimes,
+/// progress) would have to be invented.
 struct LiveTVView: View {
     @EnvironmentObject var channelVM: ChannelViewModel
     @EnvironmentObject var playerVM: PlayerViewModel
     @EnvironmentObject var sourcesVM: SourcesViewModel
 
-    @State private var viewMode: ViewMode = .grid
-    @State private var displayLimit = 120
-    @State private var searchDraft = ""
-    @State private var searchSyncTask: Task<Void, Never>?
-
-    enum ViewMode: String, CaseIterable {
-        case grid, list
-    }
+    @State private var categoryFilter = ""
+    @State private var selectedChannelID: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Toolbar
-            toolbar
-
-            Divider()
-
-            // Content
-            if channelVM.isLoading {
-                loadingView
-            } else if channelVM.filteredChannels.isEmpty {
-                emptyView
-            } else {
-                channelContent
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .onChange(of: channelVM.searchText) { _ in displayLimit = 120 }
-        .onChange(of: channelVM.selectedCategory) { _ in displayLimit = 120 }
-        .onChange(of: channelVM.selectedSourceFilter) { _ in displayLimit = 120 }
-    }
-
-    // MARK: - Toolbar
-
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            // Search
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                // Bound to local state, not straight to the view model. Writing a
-                // @Published property on every keystroke fires objectWillChange
-                // and invalidates this whole toolbar — including a Picker that
-                // rebuilds a 323-item menu each time.
-                TextField("Search channels...", text: $searchDraft)
-                    .textFieldStyle(.plain)
-                    .onChange(of: searchDraft) { newValue in
-                        searchSyncTask?.cancel()
-                        searchSyncTask = Task {
-                            try? await Task.sleep(nanoseconds: 150_000_000)
-                            guard !Task.isCancelled else { return }
-                            channelVM.searchText = newValue
-                        }
-                    }
-                if !searchDraft.isEmpty {
-                    Button {
-                        searchDraft = ""
-                        searchSyncTask?.cancel()
-                        channelVM.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .frame(maxWidth: 300)
-
-            // Category filter. Equatable so SwiftUI can skip rebuilding its
-            // menu — there are hundreds of categories and nothing about them
-            // changes while the viewer types.
-            CategoryPicker(
-                categories: channelVM.categories,
-                selection: $channelVM.selectedCategory
-            )
-            .equatable()
-            .frame(maxWidth: 200)
-
-            // Source filter
-            if sourcesVM.sources.count > 1 {
-                Picker("Source", selection: $channelVM.selectedSourceFilter) {
-                    Text("All Sources").tag(nil as UUID?)
-                    Divider()
-                    ForEach(sourcesVM.sources) { source in
-                        Text(source.name).tag(source.id as UUID?)
-                    }
-                }
-                .frame(maxWidth: 180)
-            }
-
-            Spacer()
-
-            // Channel count
-            Text("\(channelVM.filteredChannelCount) channels")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            // View mode
-            Picker("View", selection: $viewMode) {
-                Image(systemName: "square.grid.2x2").tag(ViewMode.grid)
-                Image(systemName: "list.bullet").tag(ViewMode.list)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 80)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-    }
-
-    // MARK: - Channel Content
-
-    @ViewBuilder
-    private var channelContent: some View {
-        switch viewMode {
-        case .grid:
-            channelGrid
-        case .list:
+        HStack(spacing: 0) {
+            categoryColumn
+            Divider().overlay(Theme.separator)
             channelList
+            Divider().overlay(Theme.separator)
+            inspector
         }
+        .background(Theme.surface)
     }
 
-    private var channelGrid: some View {
-        let items = Array(channelVM.filteredChannels.prefix(displayLimit))
-        return ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 16)],
-                spacing: 16
-            ) {
-                ForEach(items, id: \.compoundID) { channel in
-                    ChannelGridItem(
-                        channel: channel,
-                        isFavorite: channelVM.isFavorite(channel)
-                    ) {
-                        channelVM.recordWatch(channel)
-                        playerVM.playChannel(channel)
-                    } onFavorite: {
-                        channelVM.toggleFavorite(channel)
+    // MARK: - Categories
+
+    private var filteredCategories: [String] {
+        let query = categoryFilter.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return channelVM.categories }
+        return channelVM.categories.filter { $0.lowercased().contains(query) }
+    }
+
+    private var categoryColumn: some View {
+        VStack(spacing: 0) {
+            TextField("Filter \(channelVM.categories.count) categories", text: $categoryFilter)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textPrimary)
+                .padding(.horizontal, 9)
+                .frame(height: 26)
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.small).fill(Theme.fill))
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    categoryRow(label: "All Channels", count: channelVM.totalChannelCount, value: nil)
+                    ForEach(filteredCategories, id: \.self) { category in
+                        categoryRow(
+                            label: category,
+                            count: channelVM.channelCount(inCategory: category),
+                            value: category
+                        )
                     }
                 }
-            }
-            .padding(16)
-
-            if channelVM.filteredChannels.count > displayLimit {
-                Button {
-                    displayLimit += 120
-                } label: {
-                    Text("Load More Channels (Showing \(displayLimit) of \(channelVM.filteredChannels.count))")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.bordered)
-                .padding(.vertical, 20)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 12)
             }
         }
+        .frame(width: Theme.Metrics.categoryColumnWidth)
+    }
+
+    private func categoryRow(label: String, count: Int, value: String?) -> some View {
+        let isSelected = channelVM.selectedCategory == value
+        return Button {
+            channelVM.selectedCategory = value
+        } label: {
+            HStack(spacing: 8) {
+                Text(label)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
+                Text("\(count)")
+                    .font(.system(size: 11))
+                    .opacity(0.7)
+            }
+            .font(.system(size: 13))
+            .foregroundColor(isSelected ? .white : Theme.textPrimary)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.Radius.small)
+                    .fill(isSelected ? Theme.accent : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Channel List
+
+    private var selectedChannel: Channel? {
+        channelVM.filteredChannels.first { $0.compoundID == selectedChannelID }
+            ?? channelVM.filteredChannels.first
     }
 
     private var channelList: some View {
-        let items = Array(channelVM.filteredChannels.prefix(displayLimit))
-        return List {
-            ForEach(items, id: \.compoundID) { channel in
-                ChannelListRow(
-                    channel: channel,
-                    isFavorite: channelVM.isFavorite(channel)
-                ) {
-                    channelVM.recordWatch(channel)
-                    playerVM.playChannel(channel)
-                } onFavorite: {
-                    channelVM.toggleFavorite(channel)
-                }
-            }
-
-            if channelVM.filteredChannels.count > displayLimit {
-                Button {
-                    displayLimit += 120
-                } label: {
-                    Text("Load More Channels (Showing \(displayLimit) of \(channelVM.filteredChannels.count))")
-                        .font(.subheadline.weight(.medium))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
-    }
-
-    // MARK: - States
-
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Loading channels...")
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: channelVM.searchText.isEmpty ? "tv.slash" : "magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-
-            Text(channelVM.searchText.isEmpty ? "No channels available" : "No channels found")
-                .font(.title2.bold())
-
-            Text(channelVM.searchText.isEmpty
-                 ? (sourcesVM.sources.isEmpty ? "Add an IPTV source to start browsing channels." : "Channels are not loaded yet.")
-                 : "Try a different search term or filter.")
-                .foregroundColor(.secondary)
-
-            if sourcesVM.sources.isEmpty {
-                Button {
-                    sourcesVM.isShowingAddSource = true
-                } label: {
-                    Label("Add Source", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-            } else if !channelVM.searchText.isEmpty || channelVM.selectedCategory != nil {
-                Button("Clear Filters") {
-                    channelVM.clearFilters()
-                }
-                .buttonStyle(.borderedProminent)
+        Group {
+            if channelVM.isLoading {
+                ScrollView { ChannelListSkeleton() }
+                    .allowsHitTesting(false)
+            } else if channelVM.filteredChannels.isEmpty {
+                emptyState
             } else {
-                Button("Reload Channels") {
-                    if let profileID = sourcesVM.profileID {
-                        Task { await channelVM.loadChannels(profileID: profileID, sources: sourcesVM.sources) }
+                // Continuous scrolling: LazyVStack realises only visible rows,
+                // so the whole filtered list can be rendered at once.
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(channelVM.filteredChannels.enumerated()), id: \.element.compoundID) { index, channel in
+                            channelRow(channel, number: index + 1)
+                        }
                     }
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
-}
 
-// MARK: - Channel Grid Item
+    private func channelRow(_ channel: Channel, number: Int) -> some View {
+        let isSelected = selectedChannel?.compoundID == channel.compoundID
+        return HStack(spacing: 12) {
+            Text("\(number)")
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundColor(Theme.textTertiary)
+                .frame(width: 34, alignment: .trailing)
 
-struct ChannelGridItem: View {
-    let channel: Channel
-    let isFavorite: Bool
-    let onPlay: () -> Void
-    let onFavorite: () -> Void
+            LogoTile(name: channel.name, logoURL: channel.logoURL, size: 38)
 
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: onPlay) {
-            VStack(spacing: 0) {
-                // Logo area
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .frame(height: 100)
-                    .overlay {
-                        if let logoURL = channel.logoURL {
-                            CachedImageView(url: logoURL)
-                                .frame(width: 56, height: 56)
-                        } else {
-                            Image(systemName: "tv")
-                                .font(.system(size: 28))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                // Play overlay
-                if isHovered {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.black.opacity(0.35))
-                        .frame(height: 100)
-                        .overlay {
-                            Image(systemName: "play.circle.fill")
-                                .font(.system(size: 40))
-                                .foregroundColor(.white)
-                                .shadow(radius: 4)
-                        }
-                }
-
-                // Favorite badge
-                if isFavorite {
-                    Image(systemName: "star.fill")
-                        .font(.caption)
-                        .foregroundColor(.yellow)
-                        .padding(6)
-                }
-            }
-
-            // Info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(channel.name)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-
-                if let group = channel.group {
-                    Text(group)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(channel.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
                         .lineLimit(1)
+                    if channelVM.isFavorite(channel) {
+                        Text("★")
+                            .font(.system(size: 11))
+                            .foregroundColor(Theme.star)
+                    }
                 }
+                // The design shows the current programme here; without EPG the
+                // channel's group is the most useful thing we actually know.
+                Text(channel.group ?? "Live TV")
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
+
+            Spacer(minLength: 8)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isHovered ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 2)
-        )
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .shadow(color: .black.opacity(isHovered ? 0.15 : 0.05), radius: isHovered ? 8 : 2)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.15), value: isHovered)
-        .contextMenu {
-            Button { onPlay() } label: {
-                Label("Play", systemImage: "play.fill")
-            }
-            Button { onFavorite() } label: {
-                Label(isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                      systemImage: isFavorite ? "star.slash" : "star.fill")
-            }
-        }
-    }
-}
-
-// MARK: - Channel List Row
-
-struct ChannelListRow: View {
-    let channel: Channel
-    let isFavorite: Bool
-    let onPlay: () -> Void
-    let onFavorite: () -> Void
-
-    var body: some View {
-        Button(action: onPlay) {
-            HStack(spacing: 12) {
-                // Logo
-            Group {
-                if let logoURL = channel.logoURL {
-                    CachedImageView(url: logoURL)
-                        .frame(width: 36, height: 36)
-                } else {
-                    Image(systemName: "tv")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary)
-                        .frame(width: 36, height: 36)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            // Info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(channel.name)
-                    .font(.body.weight(.medium))
-
-                if let group = channel.group {
-                    Text(group)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Spacer()
-
-            // Favorite indicator
-            if isFavorite {
-                Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
-                    .font(.caption)
-            }
-
-            // Play button
-            Image(systemName: "play.fill")
-                .foregroundColor(.blue)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(isSelected ? Theme.rowSelected : .clear)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.separatorFaint).frame(height: 1)
         }
         .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button { onPlay() } label: {
-                Label("Play", systemImage: "play.fill")
+        .onTapGesture { selectedChannelID = channel.compoundID }
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded { play(channel) }
+        )
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if !channelVM.searchText.isEmpty {
+            EmptyStateView(
+                kind: .noSearchResults(query: channelVM.searchText),
+                actionTitle: "Clear Search"
+            ) {
+                channelVM.searchText = ""
             }
-            Button { onFavorite() } label: {
-                Label(isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                      systemImage: isFavorite ? "star.slash" : "star.fill")
-            }
+        } else if sourcesVM.sources.filter(\.isEnabled).isEmpty {
+            EmptyStateView(kind: .noSources)
+        } else {
+            EmptyStateView(
+                kind: .empty(
+                    title: "No channels here",
+                    message: "This category is empty. Pick another from the list on the left."
+                )
+            )
         }
+    }
+
+    // MARK: - Inspector
+
+    @ViewBuilder
+    private var inspector: some View {
+        if let channel = selectedChannel {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Button {
+                        play(channel)
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: Theme.Radius.card)
+                                .fill(IdentityColor.artwork(for: channel.name))
+                            Circle()
+                                .fill(Color.black.opacity(0.45))
+                                .frame(width: 48, height: 48)
+                                .overlay(
+                                    Image(systemName: "play.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.white)
+                                )
+                        }
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .overlay(alignment: .topLeading) {
+                            DesignBadge(text: "LIVE").padding(9)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    HStack(spacing: 10) {
+                        LogoTile(name: channel.name, logoURL: channel.logoURL, size: 34)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(channel.name)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Theme.textPrimary)
+                                .lineLimit(2)
+                            Text(channel.group ?? "Live TV")
+                                .font(.system(size: 12))
+                                .foregroundColor(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: 8) {
+                        Button("Watch") { play(channel) }
+                            .buttonStyle(DesignPrimaryButtonStyle(horizontalPadding: 0, verticalPadding: 7))
+                            .frame(maxWidth: .infinity)
+
+                        Button(channelVM.isFavorite(channel) ? "★ Favorite" : "☆ Favorite") {
+                            channelVM.toggleFavorite(channel)
+                        }
+                        .buttonStyle(DesignSecondaryButtonStyle(horizontalPadding: 0, verticalPadding: 7))
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    // The design's "ON NOW" and "UP NEXT" blocks need EPG data
+                    // the app does not have; the stream's technical details are
+                    // shown instead of inventing a schedule.
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("DETAILS")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.4)
+                            .foregroundColor(Theme.textTertiary)
+
+                        detailRow("Category", channel.group ?? "—")
+                        if let language = channel.language, !language.isEmpty {
+                            detailRow("Language", language)
+                        }
+                        if let country = channel.country, !country.isEmpty {
+                            detailRow("Country", country)
+                        }
+                        detailRow("Source", sourceName(for: channel))
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+            }
+            .frame(width: Theme.Metrics.inspectorWidth)
+            .background(Theme.surfaceInspector)
+        } else {
+            Color.clear.frame(width: Theme.Metrics.inspectorWidth)
+        }
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textTertiary)
+                .frame(width: 70, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textSecondary)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func sourceName(for channel: Channel) -> String {
+        sourcesVM.sources.first { $0.id == channel.sourceID }?.name ?? "Unknown"
+    }
+
+    private func play(_ channel: Channel) {
+        channelVM.recordWatch(channel)
+        // Hand over the list as filtered, so ↑/↓ in the player walks the same
+        // channels in the same order the viewer is looking at.
+        playerVM.channelLineup = channelVM.filteredChannels
+        playerVM.lineupCategory = channelVM.selectedCategory ?? "All Channels"
+        playerVM.playChannel(channel)
     }
 }
 
-// MARK: - Category Picker
+// MARK: - Previews
 
-/// Category menu, isolated from the rest of the toolbar.
-///
-/// A playlist can carry several hundred categories, and `Picker` builds a menu
-/// item for every one of them on each view update. Conforming to `Equatable`
-/// lets SwiftUI skip that work when only unrelated state — such as the search
-/// text — has changed.
-private struct CategoryPicker: View, Equatable {
-    let categories: [String]
-    @Binding var selection: String?
-
-    static func == (lhs: CategoryPicker, rhs: CategoryPicker) -> Bool {
-        lhs.selection == rhs.selection && lhs.categories == rhs.categories
-    }
-
-    var body: some View {
-        Picker("Category", selection: $selection) {
-            Text("All Categories").tag(nil as String?)
-            Divider()
-            ForEach(categories, id: \.self) { category in
-                Text(category).tag(category as String?)
-            }
+struct LiveTVView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            LiveTVView().previewDisplayName("Live TV — Dark").preferredColorScheme(.dark)
+            LiveTVView().previewDisplayName("Live TV — Light").preferredColorScheme(.light)
         }
+        .environmentObject(ChannelViewModel())
+        .environmentObject(PlayerViewModel())
+        .environmentObject(SourcesViewModel())
+        .frame(width: 1000, height: 600)
+    }
+}
+
+struct ChannelListSkeleton_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            ChannelListSkeleton()
+                .previewDisplayName("Channels loading — Dark")
+                .preferredColorScheme(.dark)
+            ChannelListSkeleton()
+                .previewDisplayName("Channels loading — Light")
+                .preferredColorScheme(.light)
+        }
+        .frame(width: 560, height: 420)
     }
 }

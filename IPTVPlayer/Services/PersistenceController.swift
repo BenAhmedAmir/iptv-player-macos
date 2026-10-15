@@ -49,6 +49,10 @@ final class PersistenceController: ObservableObject {
         profileDirectory(profileID).appendingPathComponent("playback_positions.json")
     }
 
+    private func catalogueFile(profileID: UUID, tab: CatalogueTab) -> URL {
+        profileDirectory(profileID).appendingPathComponent("catalogue_\(tab.rawValue).json")
+    }
+
     private func channelCacheFile(sourceID: UUID) -> URL {
         storageDirectory.appendingPathComponent("cache_\(sourceID.uuidString).json")
     }
@@ -177,6 +181,24 @@ final class PersistenceController: ObservableObject {
         saveAsync(positions, to: playbackPositionsFile(profileID: profileID))
     }
 
+    // MARK: - Catalogue Preferences
+
+    /// Sidebar selection, pins, expanded groups and filters — per profile and
+    /// per tab, so Movies and TV Shows never share a selection.
+    func loadCataloguePreferences(profileID: UUID, tab: CatalogueTab) -> CataloguePreferences {
+        load(CataloguePreferences.self, from: catalogueFile(profileID: profileID, tab: tab))
+            ?? .default
+    }
+
+    func saveCataloguePreferences(
+        _ preferences: CataloguePreferences,
+        profileID: UUID,
+        tab: CatalogueTab
+    ) {
+        // Written on every pin, collapse and filter change, so never blocking.
+        saveAsync(preferences, to: catalogueFile(profileID: profileID, tab: tab))
+    }
+
     // MARK: - Channel Cache
 
     func loadCachedChannels(sourceID: UUID) -> [CachedChannel]? {
@@ -186,6 +208,40 @@ final class PersistenceController: ObservableObject {
     func saveCachedChannels(_ channels: [CachedChannel], sourceID: UUID) {
         // Synchronous — channel loading reads this immediately after saving
         saveSync(channels, to: channelCacheFile(sourceID: sourceID))
+    }
+
+    /// Removes everything belonging to one source.
+    ///
+    /// Deleting a source used to drop only its channel cache and Keychain
+    /// entry, leaving its VOD caches, categories and per-profile records on
+    /// disk forever — invisible, but still counted and still taking space.
+    func deleteAllData(sourceID: UUID, profileID: UUID) {
+        // Source-scoped caches.
+        for url in [
+            channelCacheFile(sourceID: sourceID),
+            vodCategoriesFile(sourceID: sourceID),
+            vodMoviesFile(sourceID: sourceID),
+            seriesCategoriesFile(sourceID: sourceID),
+            seriesFile(sourceID: sourceID)
+        ] {
+            try? fileManager.removeItem(at: url)
+        }
+
+        // Profile-scoped records that point at this source.
+        let favorites = loadFavorites(profileID: profileID).filter { $0.sourceID != sourceID }
+        saveFavorites(favorites, profileID: profileID)
+
+        let watched = loadRecentlyWatched(profileID: profileID).filter { $0.sourceID != sourceID }
+        saveRecentlyWatched(watched, profileID: profileID)
+
+        let positions = loadPlaybackPositions(profileID: profileID).filter { $0.sourceID != sourceID }
+        savePlaybackPositions(positions, profileID: profileID)
+
+        // Pinned categories and the selected category refer to ids that no
+        // longer resolve, so browsing state resets with the source.
+        for tab in [CatalogueTab.movies, .series] {
+            saveCataloguePreferences(.default, profileID: profileID, tab: tab)
+        }
     }
 
     func deleteCachedChannels(sourceID: UUID) {
