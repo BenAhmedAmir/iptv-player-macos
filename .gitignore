@@ -81,3 +81,7 @@ Screenshot*.png
 *.sample.txt
 tmp/
 *.log
+
+# Design scratch: exported mockup documents and a duplicate of export/'s icon
+# set. The shipping icon sources live in export/.
+redesign/
